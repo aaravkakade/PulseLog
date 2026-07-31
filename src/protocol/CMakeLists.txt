@@ -1,0 +1,11 @@
+pulselog_add_module(
+  protocol
+  SOURCES
+  opcode.cc
+  frame.cc
+  record.cc
+  messages_data.cc
+  messages_control.cc
+  messages_group.cc
+  DEPS
+  pulselog::base)
