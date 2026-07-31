@@ -1,0 +1,11 @@
+pulselog_add_module(
+  base
+  SOURCES
+  status.cc
+  types.cc
+  buffer.cc
+  crc32c.cc
+  logging.cc
+  config.cc
+  DEPS
+  Threads::Threads)
