@@ -1,0 +1,51 @@
+---
+# Static analysis profile for PulseLog.
+#
+# The enabled set focuses on the classes of defect that actually matter for a
+# storage/networking engine: ownership mistakes, narrowing conversions on wire
+# and offset arithmetic, accidental copies on hot paths, and undefined
+# behaviour. Stylistic checks that fight the chosen formatting are disabled.
+Checks: >
+  -*,
+  bugprone-*,
+  cert-*,
+  concurrency-*,
+  cppcoreguidelines-pro-type-member-init,
+  cppcoreguidelines-slicing,
+  cppcoreguidelines-virtual-class-destructor,
+  misc-*,
+  modernize-*,
+  performance-*,
+  portability-*,
+  readability-const-return-type,
+  readability-container-size-empty,
+  readability-misleading-indentation,
+  readability-redundant-*,
+  readability-simplify-boolean-expr,
+  readability-string-compare,
+  -bugprone-easily-swappable-parameters,
+  -bugprone-narrowing-conversions,
+  -cert-err58-cpp,
+  -misc-include-cleaner,
+  -misc-non-private-member-variables-in-classes,
+  -misc-no-recursion,
+  -modernize-use-trailing-return-type,
+  -modernize-avoid-c-arrays,
+  -performance-avoid-endl,
+  -readability-redundant-access-specifiers
+
+WarningsAsErrors: ''
+HeaderFilterRegex: '.*/(include/pulselog|src|clients/cpp)/.*'
+FormatStyle: file
+
+CheckOptions:
+  - key: readability-identifier-naming.ClassCase
+    value: CamelCase
+  - key: readability-identifier-naming.StructCase
+    value: CamelCase
+  - key: readability-identifier-naming.EnumCase
+    value: CamelCase
+  - key: readability-identifier-naming.FunctionCase
+    value: CamelCase
+  - key: readability-identifier-naming.PrivateMemberSuffix
+    value: '_'

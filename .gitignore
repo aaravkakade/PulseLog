@@ -1,0 +1,56 @@
+# Build directories
+build/
+build-*/
+cmake-build-*/
+out/
+_deps/
+
+# CMake artifacts
+CMakeCache.txt
+CMakeFiles/
+CMakeUserPresets.json
+compile_commands.json
+install_manifest.txt
+
+# Compiled objects / binaries
+*.o
+*.a
+*.so
+*.dylib
+*.dSYM/
+
+# Runtime data produced by brokers and tests
+data/
+*.log.seg
+*.index
+pulselog-data/
+/tmp-data/
+
+# Benchmark output
+bench-results/
+results/*.json
+results/*.csv
+results/*.png
+!results/.gitkeep
+
+# Profiling artifacts
+perf.data
+perf.data.old
+*.folded
+*.svg.tmp
+flamegraph*.svg
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.mypy_cache/
+.pytest_cache/
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+*.swp
+tags
