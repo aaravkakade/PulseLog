@@ -1,0 +1,14 @@
+pulselog_add_module(
+  net
+  SOURCES
+  socket.cc
+  poller.cc
+  event_loop.cc
+  connection.cc
+  tcp_server.cc
+  sync_client.cc
+  DEPS
+  pulselog::base
+  pulselog::concurrency
+  pulselog::protocol
+  Threads::Threads)
