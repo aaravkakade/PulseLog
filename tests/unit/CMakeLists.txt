@@ -4,3 +4,4 @@ pulselog_add_test(test_concurrency SOURCES test_queues.cc DEPS pulselog::concurr
 pulselog_add_test(test_protocol SOURCES test_frame.cc test_record.cc test_messages.cc
                   DEPS pulselog::protocol)
 pulselog_add_test(test_storage SOURCES test_storage.cc DEPS pulselog::storage)
+pulselog_add_test(test_metrics SOURCES test_metrics.cc DEPS pulselog::metrics)

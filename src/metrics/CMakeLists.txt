@@ -1,0 +1,11 @@
+pulselog_add_module(
+  metrics
+  SOURCES
+  histogram.cc
+  registry.cc
+  process_stats.cc
+  exporter.cc
+  DEPS
+  pulselog::base
+  pulselog::concurrency
+  Threads::Threads)
