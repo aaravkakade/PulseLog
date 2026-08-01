@@ -104,6 +104,18 @@ void RewriteRecordOffset(std::uint8_t* record_start, std::size_t record_size, Of
   StoreLe<std::uint32_t>(record_start + kOffCrc, crc);
 }
 
+void RewriteRecordHeader(std::uint8_t* record_start, std::size_t record_size, Offset offset,
+                         TimestampMs timestamp) {
+  StoreLeI64(record_start + kOffOffset, offset);
+  StoreLeI64(record_start + kOffTimestamp, timestamp);
+  const std::uint32_t crc = Crc32c(record_start + kOffOffset, record_size - kOffOffset);
+  StoreLe<std::uint32_t>(record_start + kOffCrc, crc);
+}
+
+TimestampMs PeekRecordTimestamp(const std::uint8_t* record_start) noexcept {
+  return LoadLeI64(record_start + kOffTimestamp);
+}
+
 std::optional<std::uint32_t> PeekRecordLength(ByteSpan data, std::size_t pos) noexcept {
   if (pos + 4 > data.size()) return std::nullopt;
   return LoadLe<std::uint32_t>(data.data() + pos);

@@ -1,0 +1,11 @@
+pulselog_add_module(
+  storage
+  SOURCES
+  file_util.cc
+  offset_index.cc
+  segment.cc
+  partition_log.cc
+  DEPS
+  pulselog::base
+  pulselog::protocol
+  pulselog::concurrency)

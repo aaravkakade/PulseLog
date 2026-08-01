@@ -84,10 +84,18 @@ std::size_t AppendRecord(ByteBuffer& out, Offset offset, TimestampMs timestamp,
 
 // Overwrites the offset field of a record already encoded at `record_start`
 // and repairs the CRC. Used by the leader when it assigns offsets to a batch
-// the producer sent with offset 0 -- cheaper than re-encoding the record, and
-// the CRC is recomputed over the (small) header prefix plus the retained tail
-// checksum is not reusable, so the whole record is re-checksummed.
+// the producer sent with offset 0. The whole record is re-checksummed because
+// CRC-32C cannot be patched incrementally for a mid-message edit.
 void RewriteRecordOffset(std::uint8_t* record_start, std::size_t record_size, Offset offset);
+
+// Same, but also replaces the timestamp. Used when a producer leaves the
+// timestamp unset and the broker stamps log-append time.
+void RewriteRecordHeader(std::uint8_t* record_start, std::size_t record_size, Offset offset,
+                         TimestampMs timestamp);
+
+// Reads a record's timestamp without validating anything else. The caller must
+// already know the record is structurally sound.
+[[nodiscard]] TimestampMs PeekRecordTimestamp(const std::uint8_t* record_start) noexcept;
 
 // Parses the record beginning at `data[pos]`.
 //
