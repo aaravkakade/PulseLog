@@ -212,6 +212,8 @@ class PooledBuffer {
 
   [[nodiscard]] ByteBuffer* get() noexcept { return buffer_.get(); }
 
+  [[nodiscard]] const ByteBuffer* get() const noexcept { return buffer_.get(); }
+
   void Reset() {
     if (pool_ != nullptr && buffer_ != nullptr) {
       pool_->Release(std::move(buffer_));
