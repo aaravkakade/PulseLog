@@ -49,13 +49,19 @@ struct SegmentOptions {
 };
 
 // What a recovery scan found.
+//
+// `truncated` means real data was discarded -- a torn write or corruption.
+// Trimming the unwritten remainder of a preallocated segment is routine and is
+// reported separately as `preallocated_bytes`, because conflating the two
+// would make every clean restart look like a data-loss event.
 struct RecoveryReport {
   Offset next_offset = 0;         // First unused offset.
   std::uint64_t valid_bytes = 0;  // Bytes that survived validation.
   std::uint64_t truncated_bytes = 0;
+  std::uint64_t preallocated_bytes = 0;
   std::uint64_t records_scanned = 0;
-  bool truncated = false;         // True when a damaged/torn tail was removed.
-  std::string reason;             // Why truncation happened, for the log.
+  bool truncated = false;  // True only when a damaged/torn tail was removed.
+  std::string reason;      // Why truncation happened, for the log.
 };
 
 class Segment {

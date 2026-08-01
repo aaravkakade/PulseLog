@@ -86,6 +86,7 @@ Status PartitionLog::LoadSegments(RecoveryReport* recovery_out) {
 
     combined.records_scanned += report.records_scanned;
     combined.valid_bytes += report.valid_bytes;
+    combined.preallocated_bytes += report.preallocated_bytes;
     if (report.truncated) {
       combined.truncated = true;
       combined.truncated_bytes += report.truncated_bytes;
@@ -113,6 +114,12 @@ Status PartitionLog::LoadSegments(RecoveryReport* recovery_out) {
                       << " log_end=" << log_end_offset_.load(std::memory_order_relaxed)
                       << " records=" << combined.records_scanned
                       << " truncated_bytes=" << combined.truncated_bytes;
+  if (combined.truncated) {
+    PL_WARN(kComponent) << "recovery discarded damaged data"
+                        << " partition=" << topic_partition_.ToString()
+                        << " dropped_bytes=" << combined.truncated_bytes << " reason=\""
+                        << combined.reason << "\"";
+  }
 
   if (recovery_out != nullptr) *recovery_out = combined;
   return OkStatus();

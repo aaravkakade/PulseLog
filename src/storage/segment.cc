@@ -161,13 +161,33 @@ Result<RecoveryReport> Segment::Recover(bool full_scan) {
   report.records_scanned = records;
 
   if (position < file_size) {
-    report.truncated = true;
-    report.truncated_bytes = file_size - position;
-    report.reason = stop_reason.empty() ? "trailing bytes are not a valid record" : stop_reason;
-    PL_WARN(kComponent) << "truncating segment tail"
-                        << " path=" << log_path_.filename().string()
-                        << " valid_bytes=" << position << " dropped_bytes=" << report.truncated_bytes
-                        << " reason=\"" << report.reason << "\"";
+    // Distinguish the unwritten remainder of a preallocated segment from real
+    // damage. Preallocated space reads as zeros, so its "record length" field
+    // is 0 -- a value no real record can have.
+    bool preallocated_tail = false;
+    std::array<std::uint8_t, 4> peek{};
+    const auto peeked = file_.ReadAt(peek.data(), peek.size(), position);
+    if (peeked.ok() && peeked.value() == peek.size()) {
+      preallocated_tail = LoadLe<std::uint32_t>(peek.data()) == 0;
+    }
+
+    if (preallocated_tail) {
+      report.preallocated_bytes = file_size - position;
+      PL_DEBUG(kComponent) << "trimming unwritten preallocated tail"
+                           << " path=" << log_path_.filename().string()
+                           << " valid_bytes=" << position
+                           << " trimmed_bytes=" << report.preallocated_bytes;
+    } else {
+      report.truncated = true;
+      report.truncated_bytes = file_size - position;
+      report.reason = stop_reason.empty() ? "trailing bytes are not a valid record" : stop_reason;
+      PL_WARN(kComponent) << "discarding damaged segment tail"
+                          << " path=" << log_path_.filename().string()
+                          << " valid_bytes=" << position
+                          << " dropped_bytes=" << report.truncated_bytes << " reason=\""
+                          << report.reason << "\"";
+    }
+
     PL_RETURN_IF_ERROR(file_.Truncate(position));
     PL_RETURN_IF_ERROR(index_.TruncateFrom(offset));
     PL_RETURN_IF_ERROR(time_index_.TruncateFrom(offset));
