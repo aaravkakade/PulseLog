@@ -1,0 +1,11 @@
+pulselog_add_module(
+  replication
+  SOURCES
+  replicator.cc
+  DEPS
+  pulselog::base
+  pulselog::protocol
+  pulselog::storage
+  pulselog::metadata
+  pulselog::net
+  pulselog::broker_core)

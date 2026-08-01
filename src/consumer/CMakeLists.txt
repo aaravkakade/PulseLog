@@ -1,0 +1,11 @@
+pulselog_add_module(
+  consumer
+  SOURCES
+  assignor.cc
+  offset_store.cc
+  group_coordinator.cc
+  DEPS
+  pulselog::base
+  pulselog::protocol
+  pulselog::storage
+  pulselog::metadata)
