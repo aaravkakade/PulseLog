@@ -96,6 +96,10 @@ class Connection final : public EventHandler {
 
   [[nodiscard]] const Endpoint& peer() const noexcept { return peer_; }
 
+  // The loop that owns this connection. Used to post responses back onto the
+  // right thread from a worker.
+  [[nodiscard]] EventLoop& loop() const noexcept { return loop_; }
+
   [[nodiscard]] std::size_t PendingOutputBytes() const noexcept { return output_bytes_; }
 
   [[nodiscard]] bool read_paused() const noexcept { return read_paused_; }
