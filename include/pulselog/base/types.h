@@ -81,6 +81,13 @@ struct TopicPartition {
     return lhs.partition == rhs.partition && lhs.topic == rhs.topic;
   }
 
+  // Ordering is topic-then-partition so an ordered container iterates a
+  // topic's partitions consecutively and in index order.
+  friend bool operator<(const TopicPartition& lhs, const TopicPartition& rhs) noexcept {
+    if (lhs.topic != rhs.topic) return lhs.topic < rhs.topic;
+    return lhs.partition < rhs.partition;
+  }
+
   [[nodiscard]] std::string ToString() const {
     return topic + "-" + std::to_string(partition.value());
   }
