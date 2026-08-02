@@ -64,6 +64,31 @@ Result<net::SyncClient*> ClientContext::AnyBroker() {
   return last_error;
 }
 
+Result<net::SyncClient*> ClientContext::CoordinatorFor(const std::string& group_id) {
+  if (brokers_.empty()) {
+    PL_RETURN_IF_ERROR(RefreshMetadata({}));
+  }
+  if (brokers_.empty()) return Unavailable("no brokers known; cannot locate a coordinator");
+
+  // The broker computes the same function over the same id-sorted list, so
+  // both sides agree without an extra round trip.
+  std::vector<protocol::BrokerEndpoint> sorted;
+  sorted.reserve(brokers_.size());
+  for (const auto& [id, broker] : brokers_) sorted.push_back(broker);
+  std::sort(sorted.begin(),
+            sorted.end(),
+            [](const protocol::BrokerEndpoint& a, const protocol::BrokerEndpoint& b) {
+              return a.id < b.id;
+            });
+
+  const BrokerId coordinator = metadata::CoordinatorForGroup(group_id, sorted);
+  const auto it = brokers_.find(coordinator.value());
+  if (it == brokers_.end()) {
+    return Unavailable("no endpoint known for coordinator " + std::to_string(coordinator.value()));
+  }
+  return ConnectTo(net::Endpoint{it->second.host, it->second.port});
+}
+
 Status ClientContext::RefreshMetadata(const std::vector<std::string>& topics) {
   PL_ASSIGN_OR_RETURN(net::SyncClient * connection, AnyBroker());
 

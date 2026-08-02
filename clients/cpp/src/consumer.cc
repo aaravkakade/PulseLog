@@ -141,7 +141,7 @@ Status Consumer::Join() {
   protocol::PayloadWriter writer(scratch_);
   request.Encode(writer);
 
-  PL_ASSIGN_OR_RETURN(net::SyncClient * connection, context_.AnyBroker());
+  PL_ASSIGN_OR_RETURN(net::SyncClient * connection, context_.CoordinatorFor(config_.group_id));
   PL_ASSIGN_OR_RETURN(
       auto frame,
       connection->Call(
@@ -195,7 +195,7 @@ Status Consumer::Leave() {
   protocol::PayloadWriter writer(scratch_);
   request.Encode(writer);
 
-  PL_ASSIGN_OR_RETURN(net::SyncClient * connection, context_.AnyBroker());
+  PL_ASSIGN_OR_RETURN(net::SyncClient * connection, context_.CoordinatorFor(config_.group_id));
   PL_ASSIGN_OR_RETURN(
       auto frame,
       connection->Call(
@@ -221,7 +221,7 @@ Status Consumer::Heartbeat() {
   protocol::PayloadWriter writer(scratch_);
   request.Encode(writer);
 
-  PL_ASSIGN_OR_RETURN(net::SyncClient * connection, context_.AnyBroker());
+  PL_ASSIGN_OR_RETURN(net::SyncClient * connection, context_.CoordinatorFor(config_.group_id));
   PL_ASSIGN_OR_RETURN(
       auto frame,
       connection->Call(
@@ -315,7 +315,7 @@ Status Consumer::CommitOffset(const std::string& topic, PartitionIndex partition
   protocol::PayloadWriter writer(scratch_);
   request.Encode(writer);
 
-  PL_ASSIGN_OR_RETURN(net::SyncClient * connection, context_.AnyBroker());
+  PL_ASSIGN_OR_RETURN(net::SyncClient * connection, context_.CoordinatorFor(config_.group_id));
   PL_ASSIGN_OR_RETURN(
       auto frame,
       connection->Call(
@@ -343,7 +343,7 @@ Result<Offset> Consumer::CommittedOffset(const std::string& topic, PartitionInde
   protocol::PayloadWriter writer(scratch_);
   request.Encode(writer);
 
-  PL_ASSIGN_OR_RETURN(net::SyncClient * connection, context_.AnyBroker());
+  PL_ASSIGN_OR_RETURN(net::SyncClient * connection, context_.CoordinatorFor(config_.group_id));
   PL_ASSIGN_OR_RETURN(
       auto frame,
       connection->Call(

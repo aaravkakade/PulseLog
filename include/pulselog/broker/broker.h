@@ -80,6 +80,11 @@ class Broker final : public RequestExecutor {
   [[nodiscard]] bool HandleInline(net::Connection& connection,
                                   const protocol::FrameDecoder::Frame& frame);
 
+  // Answers and returns true when this broker does not coordinate `group_id`.
+  [[nodiscard]] bool RejectIfNotCoordinator(net::Connection& connection,
+                                            const protocol::FrameDecoder::Frame& frame,
+                                            const std::string& group_id);
+
   // Copies the payload and routes to the owning worker. Answers the client
   // directly with BACKPRESSURE when that worker's queue is full.
   void RouteToWorker(net::Connection& connection,

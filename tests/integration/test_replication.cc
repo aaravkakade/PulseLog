@@ -376,6 +376,103 @@ TEST_F(ReplicationTest, QuorumFailsRatherThanDegradingWhenReplicasAreDown) {
   EXPECT_TRUE(leader_result.ok()) << leader_result.status().ToString();
 }
 
+TEST_F(ReplicationTest, ConsumerGroupOffsetsSurviveAcrossBrokers) {
+  // Regression: group state and committed offsets live on exactly one broker.
+  // Before coordinator routing existed, a consumer could join on one broker
+  // and commit on another; the commit failed with "unknown group" and the
+  // group's position silently never advanced, so every restart replayed
+  // everything.
+  client::AdminClient admin(*context_);
+  ASSERT_TRUE(admin.CreateTopic("group-routing", 3, 3).ok());
+
+  client::Producer producer(*context_);
+  for (std::int32_t p = 0; p < 3; ++p) {
+    ASSERT_TRUE(ProduceRecords(producer, "group-routing", PartitionIndex{p}, 30).ok());
+  }
+
+  // Consume with one client, committing as it goes.
+  int first_pass = 0;
+  {
+    client::ConsumerConfig config;
+    config.group_id = "cross-broker-group";
+    config.topics = {"group-routing"};
+    config.max_wait_ms = 50;
+    client::Consumer consumer(*context_, config);
+    ASSERT_TRUE(consumer.Join().ok());
+
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(20);
+    while (first_pass < 90 && std::chrono::steady_clock::now() < deadline) {
+      auto records = consumer.Poll();
+      ASSERT_TRUE(records.ok()) << records.status().ToString();
+      if (records->empty()) continue;
+      first_pass += static_cast<int>(records->size());
+      ASSERT_TRUE(consumer.Commit().ok()) << "commit must reach the coordinator";
+    }
+    EXPECT_EQ(first_pass, 90) << "expected to consume every record";
+  }
+
+  // A *fresh* client context -- new connections, its own broker rotation --
+  // must see the committed position, not replay from the start.
+  auto second_context = cluster_->MakeClient();
+  client::ConsumerConfig config;
+  config.group_id = "cross-broker-group";
+  config.topics = {"group-routing"};
+  config.max_wait_ms = 50;
+  client::Consumer consumer(*second_context, config);
+  ASSERT_TRUE(consumer.Join().ok());
+
+  int replayed = 0;
+  const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
+  while (std::chrono::steady_clock::now() < deadline) {
+    auto records = consumer.Poll();
+    ASSERT_TRUE(records.ok()) << records.status().ToString();
+    replayed += static_cast<int>(records->size());
+  }
+  EXPECT_EQ(replayed, 0) << "committed offsets were not visible to a new client; "
+                         << "it replayed " << replayed << " records";
+}
+
+TEST_F(ReplicationTest, GroupRequestToTheWrongBrokerIsRefused) {
+  // The other half of the invariant: a broker that does not coordinate a group
+  // must refuse the request rather than quietly creating a second copy of it.
+  client::AdminClient admin(*context_);
+  ASSERT_TRUE(admin.CreateTopic("wrong-broker", 3, 3).ok());
+
+  const std::string group = "fenced-group";
+  const auto brokers = cluster_->broker(0)->cluster().Brokers();
+  const BrokerId coordinator = metadata::CoordinatorForGroup(group, brokers);
+
+  // Pick any broker that is not the coordinator.
+  std::size_t victim = 0;
+  for (std::size_t i = 0; i < 3; ++i) {
+    if (static_cast<std::int32_t>(i) != coordinator.value()) {
+      victim = i;
+      break;
+    }
+  }
+
+  net::SyncClient raw;
+  ASSERT_TRUE(raw.Connect(net::Endpoint::Parse(cluster_->BootstrapFor(victim)).value()).ok());
+
+  protocol::JoinGroupRequest request;
+  request.group_id = group;
+  request.topics = {"wrong-broker"};
+  ByteBuffer payload;
+  protocol::PayloadWriter writer(payload);
+  request.Encode(writer);
+
+  auto frame = raw.Call(protocol::OpCode::kJoinGroup, 1, payload.Readable());
+  ASSERT_TRUE(frame.ok()) << frame.status().ToString();
+
+  protocol::ResponseHeader header;
+  protocol::PayloadReader reader(frame->payload);
+  ASSERT_TRUE(header.Decode(reader));
+  EXPECT_EQ(header.error, ErrorCode::kNotLeader)
+      << "a non-coordinator must refuse the join, not create a second group";
+  EXPECT_NE(header.error_message.find("coordinates group"), std::string::npos)
+      << "the error should name the coordinator: " << header.error_message;
+}
+
 TEST_F(ReplicationTest, ProduceToANonLeaderIsRedirectedNotSilentlyAccepted) {
   client::AdminClient admin(*context_);
   ASSERT_TRUE(admin.CreateTopic("routing", 3, 3).ok());

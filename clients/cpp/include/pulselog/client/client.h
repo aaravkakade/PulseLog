@@ -111,6 +111,14 @@ class ClientContext {
   [[nodiscard]] Result<net::SyncClient*> LeaderOrAny(const std::string& topic,
                                                      PartitionIndex partition);
 
+  // Connection to the broker that coordinates `group_id`.
+  //
+  // Every group operation -- join, heartbeat, leave, commit, fetch-offset --
+  // must go to the same broker, because group membership and committed offsets
+  // live there and nowhere else. Sending a commit to a different broker fails
+  // with "unknown group" and silently leaves the group's position unchanged.
+  [[nodiscard]] Result<net::SyncClient*> CoordinatorFor(const std::string& group_id);
+
   [[nodiscard]] Result<std::int32_t> PartitionCount(const std::string& topic);
 
   void InvalidateTopic(const std::string& topic);

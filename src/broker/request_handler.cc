@@ -130,6 +130,30 @@ void Broker::RouteToWorker(net::Connection& connection,
   }
 }
 
+// Rejects a group request that arrived at the wrong broker.
+//
+// Group membership and committed offsets live on exactly one broker. Serving a
+// request here anyway would create a second, independent copy of the group:
+// the consumer would join on one broker and commit on another, and the
+// group's real position would never advance. Failing names the coordinator so
+// the client can re-route.
+bool Broker::RejectIfNotCoordinator(net::Connection& connection,
+                                    const protocol::FrameDecoder::Frame& frame,
+                                    const std::string& group_id) {
+  const BrokerId coordinator = cluster_.CoordinatorFor(group_id);
+  if (!coordinator.valid() || coordinator == config_.broker_id) return false;
+
+  ByteBuffer payload;
+  protocol::EncodeErrorResponse(
+      payload,
+      ErrorCode::kNotLeader,
+      "broker " + std::to_string(coordinator.value()) + " coordinates group '" + group_id + "'");
+  (void)connection.SendFrame(
+      frame.header.opcode, frame.header.request_id, kResponseFlag, payload.Readable());
+  if (metrics_ != nullptr) metrics_->failed_requests.Increment();
+  return true;
+}
+
 bool Broker::HandleInline(net::Connection& connection, const protocol::FrameDecoder::Frame& frame) {
   ByteBuffer payload;
   const auto send = [&](auto& response) {
@@ -218,6 +242,7 @@ bool Broker::HandleInline(net::Connection& connection, const protocol::FrameDeco
       // Subscribing to a topic that does not exist yet yields an empty
       // assignment rather than creating it; the consumer picks up partitions
       // once a producer (or an explicit create) brings the topic into being.
+      if (RejectIfNotCoordinator(connection, frame, request.group_id)) return true;
       auto response = groups_->Join(request, WallClockMillis());
       send(response);
       return true;
@@ -230,6 +255,7 @@ bool Broker::HandleInline(net::Connection& connection, const protocol::FrameDeco
         send_error(ErrorCode::kProtocolError, "malformed heartbeat request");
         return true;
       }
+      if (RejectIfNotCoordinator(connection, frame, request.group_id)) return true;
       auto response = groups_->Heartbeat(request, WallClockMillis());
       send(response);
       return true;
@@ -242,6 +268,7 @@ bool Broker::HandleInline(net::Connection& connection, const protocol::FrameDeco
         send_error(ErrorCode::kProtocolError, "malformed leave-group request");
         return true;
       }
+      if (RejectIfNotCoordinator(connection, frame, request.group_id)) return true;
       auto response = groups_->Leave(request, WallClockMillis());
       send(response);
       return true;
@@ -254,6 +281,7 @@ bool Broker::HandleInline(net::Connection& connection, const protocol::FrameDeco
         send_error(ErrorCode::kProtocolError, "malformed commit-offset request");
         return true;
       }
+      if (RejectIfNotCoordinator(connection, frame, request.group_id)) return true;
       auto response = groups_->Commit(request, WallClockMillis());
       send(response);
       return true;
@@ -266,6 +294,7 @@ bool Broker::HandleInline(net::Connection& connection, const protocol::FrameDeco
         send_error(ErrorCode::kProtocolError, "malformed fetch-offset request");
         return true;
       }
+      if (RejectIfNotCoordinator(connection, frame, request.group_id)) return true;
       auto response = groups_->FetchOffset(request);
       send(response);
       return true;

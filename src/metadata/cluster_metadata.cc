@@ -50,6 +50,13 @@ PartitionIndex PartitionForKey(ByteSpan key, std::int32_t partition_count) noexc
       static_cast<std::int32_t>(hash % static_cast<std::uint32_t>(partition_count))};
 }
 
+BrokerId CoordinatorForGroup(std::string_view group_id,
+                             const std::vector<BrokerEndpoint>& brokers) noexcept {
+  if (brokers.empty()) return BrokerId{-1};
+  const std::uint32_t hash = Crc32c(AsBytes(group_id));
+  return brokers[hash % brokers.size()].id;
+}
+
 PartitionIndex PartitionRoundRobin(std::uint64_t counter, std::int32_t partition_count) noexcept {
   if (partition_count <= 1) return PartitionIndex{0};
   return PartitionIndex{
@@ -125,6 +132,12 @@ BrokerId ClusterMetadata::ControllerId() const {
   // assignment the controller only answers admin requests, so a fixed choice
   // is adequate; an election implementation would replace this.
   return brokers_.empty() ? BrokerId{-1} : brokers_.front().id;
+}
+
+BrokerId ClusterMetadata::CoordinatorFor(std::string_view group_id) const {
+  std::shared_lock<std::shared_mutex> lock(mutex_);
+  // brokers_ is kept sorted by id, so every broker computes the same answer.
+  return CoordinatorForGroup(group_id, brokers_);
 }
 
 std::vector<PartitionAssignment> ClusterMetadata::ComputeAssignments(

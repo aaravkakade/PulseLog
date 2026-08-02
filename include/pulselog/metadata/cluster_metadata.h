@@ -64,6 +64,19 @@ struct TopicDescriptor {
 // keys across partitions, so it is part of the compatibility contract.
 [[nodiscard]] PartitionIndex PartitionForKey(ByteSpan key, std::int32_t partition_count) noexcept;
 
+// Broker that coordinates a consumer group.
+//
+// Group membership and committed offsets live on exactly one broker, chosen by
+// hashing the group ID over the id-sorted broker list. Client and broker must
+// compute this identically, which is why it is one function used by both:
+// without a single owner, a JoinGroup and a CommitOffset from the same
+// consumer can land on different brokers, and the second one fails with
+// "unknown group" while the group's real position never advances.
+//
+// The hash is CRC-32C, as it is for key routing.
+[[nodiscard]] BrokerId CoordinatorForGroup(std::string_view group_id,
+                                           const std::vector<BrokerEndpoint>& brokers) noexcept;
+
 // Partition for a record with no key: round-robin via the caller's counter.
 [[nodiscard]] PartitionIndex PartitionRoundRobin(std::uint64_t counter,
                                                  std::int32_t partition_count) noexcept;
@@ -87,6 +100,9 @@ class ClusterMetadata {
   [[nodiscard]] std::optional<BrokerEndpoint> FindBroker(BrokerId id) const;
 
   [[nodiscard]] BrokerId ControllerId() const;
+
+  // Broker that coordinates `group_id`. See CoordinatorForGroup.
+  [[nodiscard]] BrokerId CoordinatorFor(std::string_view group_id) const;
 
   // Creates a topic and computes its partition assignments. Returns
   // ALREADY_EXISTS if the name is taken with a different configuration, and OK
