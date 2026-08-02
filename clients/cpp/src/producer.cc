@@ -34,16 +34,24 @@ Result<PartitionIndex> Producer::RouteFor(const std::string& topic,
                                           const OutboundRecord& record) {
   if (config_.forced_partition >= 0) return PartitionIndex{config_.forced_partition};
 
-  PL_ASSIGN_OR_RETURN(const std::int32_t partition_count, context_.PartitionCount(topic));
-  if (partition_count <= 0) return Unavailable("topic '" + topic + "' has no partitions");
+  auto partition_count = context_.PartitionCount(topic);
+  if (!partition_count.ok()) {
+    if (partition_count.status().code() != ErrorCode::kNotFound) return partition_count.status();
+    // The topic does not exist yet. Send to partition 0: if the broker has
+    // auto-create enabled it will create the topic and answer, and the next
+    // send routes properly against refreshed metadata. If auto-create is off
+    // the broker answers NOT_FOUND, which is what the caller should see.
+    return PartitionIndex{0};
+  }
+  if (partition_count.value() <= 0) return Unavailable("topic '" + topic + "' has no partitions");
 
   if (record.key_is_null) {
     // No key means no ordering requirement, so spread the load.
-    return metadata::PartitionRoundRobin(round_robin_++, partition_count);
+    return metadata::PartitionRoundRobin(round_robin_++, partition_count.value());
   }
   // Same key always lands on the same partition, which is what makes
   // per-key ordering a usable guarantee.
-  return metadata::PartitionForKey(AsBytes(record.key), partition_count);
+  return metadata::PartitionForKey(AsBytes(record.key), partition_count.value());
 }
 
 Result<DeliveryResult> Producer::SendEncoded(const std::string& topic, PartitionIndex partition,
@@ -73,7 +81,7 @@ Result<DeliveryResult> Producer::SendEncoded(const std::string& topic, Partition
       ++stats_.retries;
     }
 
-    auto connection = context_.LeaderFor(topic, partition);
+    auto connection = context_.LeaderOrAny(topic, partition);
     if (!connection.ok()) {
       last_error = connection.status();
       if (!IsRetryable(last_error.code())) break;

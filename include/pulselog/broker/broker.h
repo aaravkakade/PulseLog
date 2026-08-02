@@ -29,6 +29,7 @@
 #include "pulselog/metrics/exporter.h"
 #include "pulselog/metrics/process_stats.h"
 #include "pulselog/metrics/registry.h"
+#include "pulselog/net/sync_client.h"
 #include "pulselog/net/tcp_server.h"
 #include "pulselog/replication/replicator.h"
 
@@ -102,6 +103,10 @@ class Broker final : public RequestExecutor {
 
   void ExecuteReplicaAck(WorkerRequest& request);
 
+  void ExecuteCreateTopic(WorkerRequest& request);
+
+  void ExecuteDeleteTopic(WorkerRequest& request);
+
   // Sends a response frame back on the connection that made the request, by
   // posting onto that connection's io loop. Safe if the connection is gone.
   void Respond(std::size_t loop_index, std::uint64_t connection_id, protocol::OpCode opcode,
@@ -121,6 +126,29 @@ class Broker final : public RequestExecutor {
   void MaintenanceLoop();
 
   void MetricsLoop();
+
+  // Topic creation has exactly one owner: the controller (the lowest broker
+  // ID). Any broker that needs a topic created forwards the request there and
+  // then reconciles. Without a single owner, two brokers can create the same
+  // topic with different partition counts -- which silently reroutes keys and
+  // makes replication fail with "this broker does not host X".
+  // `apply_locally` is set when the controller pushed this topic to us: the
+  // decision is already made, so it is applied here rather than forwarded.
+  [[nodiscard]] Result<metadata::TopicDescriptor> EnsureTopic(const std::string& topic,
+                                                              std::int32_t partitions,
+                                                              std::int16_t replication_factor,
+                                                              bool apply_locally = false);
+
+  // Pushes a newly created topic to every peer, synchronously, so that a
+  // successful CreateTopic means every reachable broker can already serve and
+  // replicate it. Unreachable peers pick it up through reconciliation.
+  void BroadcastTopic(const metadata::TopicDescriptor& descriptor);
+
+  // Pulls topic metadata from the controller and adopts anything unknown.
+  // Assignments are deterministic, so adopting the controller's view is the
+  // same as recomputing it -- but taking it verbatim also carries leader
+  // epochs, which are not derivable.
+  [[nodiscard]] Status ReconcileMetadataFromController();
 
   [[nodiscard]] Status LoadOrInitialiseMetadata();
 
@@ -152,6 +180,12 @@ class Broker final : public RequestExecutor {
   NamedThread flusher_thread_;
   NamedThread maintenance_thread_;
   NamedThread metrics_thread_;
+
+  // Connection to the controller, used only by the maintenance thread and by
+  // topic-creation forwarding on worker threads. Guarded because both touch it.
+  std::mutex controller_mutex_;
+  std::unique_ptr<net::SyncClient> controller_client_;
+  std::atomic<RequestId> control_request_id_{1};
 
   std::atomic<bool> running_{false};
   std::atomic<bool> stopping_{false};

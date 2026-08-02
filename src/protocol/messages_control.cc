@@ -63,6 +63,7 @@ void CreateTopicRequest::Encode(PayloadWriter& w) const {
   w.PutI64(retention_ms);
   w.PutI64(segment_bytes);
   w.PutU8(static_cast<std::uint8_t>(compression));
+  w.PutBool(from_controller);
 }
 
 bool CreateTopicRequest::Decode(PayloadReader& r) {
@@ -75,7 +76,7 @@ bool CreateTopicRequest::Decode(PayloadReader& r) {
   if (!r.GetU8(compression_raw)) return false;
   if (compression_raw > static_cast<std::uint8_t>(Compression::kLz4Like)) return false;
   compression = static_cast<Compression>(compression_raw);
-  return true;
+  return r.GetBool(from_controller);
 }
 
 void CreateTopicResponse::Encode(PayloadWriter& w) const {

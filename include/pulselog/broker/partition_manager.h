@@ -45,7 +45,8 @@ class PartitionManager {
 
   // Creates a topic (registering it in metadata) and opens the partitions this
   // broker hosts. Idempotent for an identical configuration.
-  [[nodiscard]] Result<metadata::TopicDescriptor> CreateTopic(const metadata::TopicConfig& config);
+  [[nodiscard]] Result<metadata::TopicDescriptor> CreateTopic(const metadata::TopicConfig& config,
+                                                              bool* created = nullptr);
 
   [[nodiscard]] Status DeleteTopic(const std::string& topic, bool delete_data);
 
@@ -57,6 +58,10 @@ class PartitionManager {
   [[nodiscard]] Result<PartitionReplica*> OpenPartition(const TopicPartition& topic_partition,
                                                         const metadata::TopicConfig& topic_config,
                                                         const metadata::PartitionAssignment& assignment);
+
+  // Opens every partition this broker hosts for `topic` according to current
+  // metadata. Used after learning about a topic from another broker.
+  [[nodiscard]] Status OpenPartitionsForTopic(const metadata::TopicDescriptor& descriptor);
 
   [[nodiscard]] std::vector<PartitionReplica*> All() const;
 

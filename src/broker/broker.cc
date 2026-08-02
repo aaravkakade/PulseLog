@@ -10,6 +10,7 @@
 #include "pulselog/base/clock.h"
 #include "pulselog/base/crc32c.h"
 #include "pulselog/base/logging.h"
+#include "pulselog/protocol/codec.h"
 #include "pulselog/storage/file_util.h"
 
 namespace pulselog::broker {
@@ -67,6 +68,215 @@ Status Broker::LoadOrInitialiseMetadata() {
     // A corrupt metadata file is fatal: guessing at topic layout would
     // silently reroute keys and break ordering guarantees.
     return loaded.WithContext("loading " + metadata_path.string());
+  }
+  return OkStatus();
+}
+
+Result<metadata::TopicDescriptor> Broker::EnsureTopic(const std::string& topic,
+                                                      std::int32_t partitions,
+                                                      std::int16_t replication_factor,
+                                                      bool apply_locally) {
+  // Already known: nothing to do. This is the common case after the first
+  // request for a topic.
+  if (auto existing = cluster_.GetTopic(topic); existing.ok()) return existing;
+
+  const BrokerId controller = cluster_.ControllerId();
+  if (controller == config_.broker_id || apply_locally) {
+    metadata::TopicConfig topic_config;
+    topic_config.name = topic;
+    topic_config.partition_count = partitions;
+    topic_config.replication_factor = replication_factor;
+
+    bool created = false;
+    PL_ASSIGN_OR_RETURN(const metadata::TopicDescriptor descriptor,
+                        partitions_.CreateTopic(topic_config, &created));
+    if (created) {
+      const Status persisted = PersistMetadata();
+      if (!persisted.ok()) {
+        PL_ERROR(kComponent) << "metadata persist failed: " << persisted.ToString();
+      }
+      // Only the controller broadcasts, and only for a topic it just created.
+      // A peer applying a pushed topic must not push it back.
+      if (!apply_locally && cluster_.Brokers().size() > 1) BroadcastTopic(descriptor);
+    }
+    return descriptor;
+  }
+
+  // Not the controller: forward, then adopt the controller's answer. Doing the
+  // creation locally would risk two brokers inventing different partition
+  // counts for the same name.
+  const auto endpoint = cluster_.FindBroker(controller);
+  if (!endpoint.has_value()) {
+    return Unavailable("controller " + std::to_string(controller.value()) + " is not configured");
+  }
+
+  protocol::CreateTopicRequest request;
+  request.topic = topic;
+  request.partitions = partitions;
+  request.replication_factor = replication_factor;
+
+  ByteBuffer payload;
+  protocol::PayloadWriter writer(payload);
+  request.Encode(writer);
+
+  {
+    std::lock_guard<std::mutex> lock(controller_mutex_);
+    if (controller_client_ == nullptr) {
+      net::SyncClientOptions options;
+      options.connect_timeout_ms = 3000;
+      options.request_timeout_ms = 5000;
+      controller_client_ = std::make_unique<net::SyncClient>(options);
+    }
+    if (!controller_client_->connected()) {
+      const Status connected =
+          controller_client_->Connect(net::Endpoint{endpoint->host, endpoint->port});
+      if (!connected.ok()) {
+        return connected.WithContext("connecting to the controller to create '" + topic + "'");
+      }
+    }
+
+    auto frame = controller_client_->Call(
+        protocol::OpCode::kCreateTopic,
+        control_request_id_.fetch_add(1, std::memory_order_relaxed), payload.Readable());
+    if (!frame.ok()) {
+      controller_client_->Close();
+      return frame.status().WithContext("forwarding topic creation to the controller");
+    }
+
+    protocol::CreateTopicResponse response;
+    protocol::PayloadReader header_reader(frame->payload);
+    if (!response.header.Decode(header_reader)) {
+      return ProtocolError("malformed create-topic response from the controller");
+    }
+    if (!response.header.ok()) return response.header.ToStatus();
+  }
+
+  // The controller created it; pull the resulting assignment.
+  PL_RETURN_IF_ERROR(ReconcileMetadataFromController());
+  return cluster_.GetTopic(topic);
+}
+
+void Broker::BroadcastTopic(const metadata::TopicDescriptor& descriptor) {
+  protocol::CreateTopicRequest request;
+  request.topic = descriptor.config.name;
+  request.partitions = descriptor.config.partition_count;
+  request.replication_factor = descriptor.config.replication_factor;
+  request.retention_ms = descriptor.config.retention_ms;
+  request.segment_bytes = descriptor.config.segment_bytes;
+  request.compression = descriptor.config.compression;
+  request.from_controller = true;
+
+  ByteBuffer payload;
+  protocol::PayloadWriter writer(payload);
+  request.Encode(writer);
+
+  for (const auto& peer : cluster_.Brokers()) {
+    if (peer.id == config_.broker_id) continue;
+
+    net::SyncClientOptions options;
+    options.connect_timeout_ms = 2000;
+    options.request_timeout_ms = 4000;
+    net::SyncClient client(options);
+
+    const Status connected = client.Connect(net::Endpoint{peer.host, peer.port});
+    if (!connected.ok()) {
+      // Not fatal: an unreachable peer adopts the topic when it reconciles.
+      PL_WARN(kComponent) << "could not push topic to peer"
+                          << " topic=" << descriptor.config.name << " peer=" << peer.id.value()
+                          << " error=" << connected.ToString();
+      continue;
+    }
+    auto frame = client.Call(protocol::OpCode::kCreateTopic,
+                             control_request_id_.fetch_add(1, std::memory_order_relaxed),
+                             payload.Readable());
+    if (!frame.ok()) {
+      PL_WARN(kComponent) << "topic push failed"
+                          << " topic=" << descriptor.config.name << " peer=" << peer.id.value()
+                          << " error=" << frame.status().ToString();
+      continue;
+    }
+    PL_DEBUG(kComponent) << "pushed topic to peer"
+                         << " topic=" << descriptor.config.name << " peer=" << peer.id.value();
+  }
+}
+
+Status Broker::ReconcileMetadataFromController() {
+  const BrokerId controller = cluster_.ControllerId();
+  if (controller == config_.broker_id) return OkStatus();
+
+  const auto endpoint = cluster_.FindBroker(controller);
+  if (!endpoint.has_value()) return OkStatus();
+
+  protocol::MetadataRequest request;  // Empty topic list means everything.
+  ByteBuffer payload;
+  protocol::PayloadWriter writer(payload);
+  request.Encode(writer);
+
+  protocol::MetadataResponse response;
+  {
+    std::lock_guard<std::mutex> lock(controller_mutex_);
+    if (controller_client_ == nullptr) {
+      net::SyncClientOptions options;
+      options.connect_timeout_ms = 2000;
+      options.request_timeout_ms = 4000;
+      controller_client_ = std::make_unique<net::SyncClient>(options);
+    }
+    if (!controller_client_->connected()) {
+      PL_RETURN_IF_ERROR(controller_client_->Connect(
+          net::Endpoint{endpoint->host, endpoint->port}));
+    }
+
+    auto frame = controller_client_->Call(
+        protocol::OpCode::kMetadata,
+        control_request_id_.fetch_add(1, std::memory_order_relaxed), payload.Readable());
+    if (!frame.ok()) {
+      controller_client_->Close();
+      return frame.status();
+    }
+    protocol::PayloadReader reader(frame->payload);
+    if (!response.Decode(reader)) return ProtocolError("malformed metadata from the controller");
+    if (!response.header.ok()) return response.header.ToStatus();
+  }
+
+  std::size_t adopted = 0;
+  for (const auto& topic : response.topics) {
+    if (cluster_.HasTopic(topic.name)) continue;
+
+    metadata::TopicDescriptor descriptor;
+    descriptor.config.name = topic.name;
+    descriptor.config.partition_count = static_cast<std::int32_t>(topic.partitions.size());
+    descriptor.config.replication_factor =
+        topic.partitions.empty()
+            ? static_cast<std::int16_t>(1)
+            : static_cast<std::int16_t>(topic.partitions[0].replicas.size());
+    for (const auto& partition : topic.partitions) {
+      metadata::PartitionAssignment assignment;
+      assignment.index = partition.index;
+      assignment.leader = partition.leader;
+      assignment.leader_epoch = partition.leader_epoch;
+      assignment.replicas = partition.replicas;
+      assignment.in_sync_replicas = partition.in_sync_replicas;
+      descriptor.partitions.push_back(std::move(assignment));
+    }
+
+    PL_RETURN_IF_ERROR(cluster_.UpsertTopic(descriptor));
+    const Status opened = partitions_.OpenPartitionsForTopic(descriptor);
+    if (!opened.ok()) {
+      PL_ERROR(kComponent) << "could not open partitions for adopted topic"
+                           << " topic=" << topic.name << " error=" << opened.ToString();
+      continue;
+    }
+    ++adopted;
+    PL_INFO(kComponent) << "adopted topic from the controller"
+                        << " topic=" << topic.name
+                        << " partitions=" << descriptor.partitions.size();
+  }
+
+  if (adopted > 0) {
+    const Status persisted = PersistMetadata();
+    if (!persisted.ok()) {
+      PL_ERROR(kComponent) << "metadata persist failed: " << persisted.ToString();
+    }
   }
   return OkStatus();
 }
@@ -233,6 +443,12 @@ void Broker::Stop() {
     groups_->Close();
   }
 
+  {
+    std::lock_guard<std::mutex> lock(controller_mutex_);
+    if (controller_client_ != nullptr) controller_client_->Close();
+    controller_client_.reset();
+  }
+
   partitions_.Close();
   workers_.clear();
   server_.reset();
@@ -283,6 +499,10 @@ void Broker::FlusherLoop() {
 
 void Broker::MaintenanceLoop() {
   std::int64_t next_retention_ms = 0;
+  std::int64_t next_reconcile_ms = 0;
+  // How often a non-controller broker pulls the topic list. This bounds how
+  // long a newly created topic can take to become replicable on a follower.
+  constexpr std::int64_t kReconcileIntervalMs = 250;
 
   while (!stopping_.load(std::memory_order_acquire)) {
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
@@ -297,6 +517,14 @@ void Broker::MaintenanceLoop() {
       const std::size_t evicted = groups_->ExpireSessions(now_ms);
       if (evicted > 0) {
         PL_INFO(kComponent) << "expired consumer sessions count=" << evicted;
+      }
+    }
+
+    if (cluster_.Brokers().size() > 1 && now_ms >= next_reconcile_ms) {
+      next_reconcile_ms = now_ms + kReconcileIntervalMs;
+      const Status status = ReconcileMetadataFromController();
+      if (!status.ok()) {
+        PL_DEBUG(kComponent) << "metadata reconcile failed: " << status.ToString();
       }
     }
 

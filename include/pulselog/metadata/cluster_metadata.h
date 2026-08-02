@@ -90,8 +90,11 @@ class ClusterMetadata {
 
   // Creates a topic and computes its partition assignments. Returns
   // ALREADY_EXISTS if the name is taken with a different configuration, and OK
-  // (idempotently) if the configuration matches.
-  [[nodiscard]] Result<TopicDescriptor> CreateTopic(const TopicConfig& config);
+  // (idempotently) if the configuration matches. `created` distinguishes the
+  // two OK cases, which callers use to avoid re-broadcasting a topic that was
+  // already known.
+  [[nodiscard]] Result<TopicDescriptor> CreateTopic(const TopicConfig& config,
+                                                    bool* created = nullptr);
 
   // Registers a topic with assignments computed elsewhere (from the persisted
   // file, or from another broker's metadata response).

@@ -94,18 +94,23 @@ Result<PartitionManager::OpenReport> PartitionManager::OpenHostedPartitions() {
 }
 
 Result<metadata::TopicDescriptor> PartitionManager::CreateTopic(
-    const metadata::TopicConfig& config) {
-  PL_ASSIGN_OR_RETURN(const metadata::TopicDescriptor descriptor, cluster_.CreateTopic(config));
+    const metadata::TopicConfig& config, bool* created) {
+  PL_ASSIGN_OR_RETURN(const metadata::TopicDescriptor descriptor,
+                      cluster_.CreateTopic(config, created));
+  PL_RETURN_IF_ERROR(OpenPartitionsForTopic(descriptor));
+  return descriptor;
+}
 
+Status PartitionManager::OpenPartitionsForTopic(const metadata::TopicDescriptor& descriptor) {
   for (const auto& assignment : descriptor.partitions) {
     if (!assignment.HasReplica(config_.broker_id)) continue;
     const TopicPartition topic_partition{descriptor.config.name, assignment.index};
     auto opened = OpenPartition(topic_partition, descriptor.config, assignment);
     if (!opened.ok()) {
-      return opened.status().WithContext("creating " + topic_partition.ToString());
+      return opened.status().WithContext("opening " + topic_partition.ToString());
     }
   }
-  return descriptor;
+  return OkStatus();
 }
 
 Status PartitionManager::DeleteTopic(const std::string& topic, bool delete_data) {

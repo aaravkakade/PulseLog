@@ -155,7 +155,9 @@ std::vector<PartitionAssignment> ClusterMetadata::ComputeAssignments(
   return assignments;
 }
 
-Result<TopicDescriptor> ClusterMetadata::CreateTopic(const TopicConfig& config) {
+Result<TopicDescriptor> ClusterMetadata::CreateTopic(const TopicConfig& config,
+                                                     bool* created) {
+  if (created != nullptr) *created = false;
   if (!IsValidTopicName(config.name)) {
     return InvalidArgument("invalid topic name '" + config.name +
                            "' (allowed: letters, digits, . _ -)");
@@ -195,6 +197,7 @@ Result<TopicDescriptor> ClusterMetadata::CreateTopic(const TopicConfig& config) 
   descriptor.config = config;
   descriptor.partitions = ComputeAssignments(config);
   topics_.emplace(config.name, descriptor);
+  if (created != nullptr) *created = true;
 
   PL_INFO(kComponent) << "created topic"
                       << " topic=" << config.name << " partitions=" << config.partition_count

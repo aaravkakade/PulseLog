@@ -141,6 +141,11 @@ struct CreateTopicRequest {
   std::int64_t retention_ms = -1;      // -1 = inherit broker default.
   std::int64_t segment_bytes = -1;     // -1 = inherit broker default.
   Compression compression = Compression::kNone;
+  // Set only when the controller is pushing an already-decided topic to a
+  // peer. A receiver that sees this applies it locally instead of forwarding
+  // to the controller -- without the distinction, a broadcast would be
+  // forwarded straight back and the two brokers would loop.
+  bool from_controller = false;
 
   void Encode(PayloadWriter& w) const;
   [[nodiscard]] bool Decode(PayloadReader& r);

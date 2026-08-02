@@ -128,6 +128,16 @@ Result<net::SyncClient*> ClientContext::LeaderFor(const std::string& topic,
   return ConnectTo(net::Endpoint{broker->second.host, broker->second.port});
 }
 
+Result<net::SyncClient*> ClientContext::LeaderOrAny(const std::string& topic,
+                                                    PartitionIndex partition) {
+  auto leader = LeaderFor(topic, partition);
+  if (leader.ok()) return leader;
+  // An unknown topic is not a dead end: any broker can accept the request and
+  // either auto-create the topic or answer NOT_LEADER with the real owner.
+  if (leader.status().code() != ErrorCode::kNotFound) return leader;
+  return AnyBroker();
+}
+
 // --- AdminClient ------------------------------------------------------------
 
 Status AdminClient::CreateTopic(const std::string& topic, std::int32_t partitions,
