@@ -404,6 +404,7 @@ docs/               design documents
 | [PERFORMANCE_RESULTS.md](docs/PERFORMANCE_RESULTS.md) | Measured results with full conditions |
 | [FAILURE_SEMANTICS.md](docs/FAILURE_SEMANTICS.md) | What survives what, and what does not |
 | [PORTABILITY.md](docs/PORTABILITY.md) | Where Linux and macOS differ, and which guarantees change |
+| [VALIDATION_REPORT.md](docs/VALIDATION_REPORT.md) | What was run, on what, and what it produced |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Build, test, style |
 | [SECURITY.md](SECURITY.md) | Threat model and the absence of authn/authz |
 
