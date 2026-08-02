@@ -5,6 +5,47 @@
 # storage/networking engine: ownership mistakes, narrowing conversions on wire
 # and offset arithmetic, accidental copies on hot paths, and undefined
 # behaviour. Stylistic checks that fight the chosen formatting are disabled.
+#
+# IMPORTANT: `Checks:` below is a YAML folded scalar (`>`). Inside it, `#` is
+# ordinary text, not a comment -- YAML folds the block into one string before
+# clang-tidy ever sees it. A comment line there does not document the next
+# entry, it concatenates with it and produces a garbage check name, silently
+# disabling nothing. That is not hypothetical: seven entries here were dead for
+# exactly that reason, which is why CI kept reporting misc-const-correctness,
+# performance-enum-size and bugprone-macro-parentheses as errors while this
+# file appeared to disable all three.
+#
+# So: every explanation lives here, above the block, and the block itself
+# contains nothing but check names.
+#
+# Why the non-obvious entries are disabled:
+#
+#   bugprone-easily-swappable-parameters
+#       Fires on any function taking two same-typed arguments, which for an
+#       offset-and-length engine is most of them.
+#   bugprone-narrowing-conversions
+#       The wire format narrows deliberately and explicitly; Narrow<> in
+#       base/types.h marks each site.
+#   bugprone-std-namespace-modification / cert-dcl58-cpp
+#       Specialising std::hash for our own types is the standard way to make
+#       them usable as unordered_map keys, and is explicitly permitted.
+#   bugprone-macro-parentheses
+#       Fires on the temporary *variable name* inside PL_ASSIGN_OR_RETURN,
+#       which cannot be parenthesised. The macro's actual arguments are.
+#   misc-const-correctness
+#       Wants `const` on nearly every local, including lock_guards. Too noisy
+#       to be actionable.
+#   misc-use-internal-linkage
+#       Misfires on out-of-line member function definitions, claiming a class
+#       method could have internal linkage.
+#   performance-enum-size
+#       Wants uint8_t bases for enums whose widths are deliberate: ErrorCode is
+#       uint16_t because it is a wire field.
+#   modernize-use-trailing-return-type
+#       Purely stylistic and contrary to the style used here.
+#   modernize-raw-string-literal
+#       The escaped literals it flags are usage text where the escapes are
+#       clearer than a raw-string delimiter.
 Checks: >
   -*,
   bugprone-*,
@@ -25,28 +66,20 @@ Checks: >
   readability-string-compare,
   -bugprone-easily-swappable-parameters,
   -bugprone-narrowing-conversions,
-  # Specialising std::hash for our own types is the standard way to make them
-  # usable as unordered_map keys, and is explicitly permitted.
   -bugprone-std-namespace-modification,
-  -cert-dcl58-cpp,
-  # Fires on the temporary *variable name* inside PL_ASSIGN_OR_RETURN, which
-  # cannot be parenthesised. The macro's actual arguments are parenthesised.
   -bugprone-macro-parentheses,
+  -cert-dcl58-cpp,
   -cert-err58-cpp,
   -misc-include-cleaner,
   -misc-non-private-member-variables-in-classes,
   -misc-no-recursion,
-  # Misfires on out-of-line member function definitions, claiming a class
-  # method could have internal linkage.
   -misc-use-internal-linkage,
-  # Too noisy to be actionable: it wants `const` on nearly every local.
   -misc-const-correctness,
-  # Wants uint8_t bases for enums whose values are already sized deliberately
-  # (ErrorCode is uint16_t because it is a wire field).
   -performance-enum-size,
+  -performance-avoid-endl,
   -modernize-use-trailing-return-type,
   -modernize-avoid-c-arrays,
-  -performance-avoid-endl,
+  -modernize-raw-string-literal,
   -readability-redundant-access-specifiers
 
 # CI runs this with --warnings-as-errors. Note that clang-tidy must match the
