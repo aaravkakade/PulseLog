@@ -125,6 +125,17 @@ jobs:
       - name: Build
         run: cmake --build build-san -j"$(nproc)"
 
+      - name: Cluster failure injection under the sanitizer
+        # The failure paths are the ones least covered by the unit tests and
+        # most likely to touch freed memory: a follower dying mid-batch, a
+        # connection reset while a response is queued, shutdown while workers
+        # are draining. Running them here is the point of having them.
+        if: matrix.sanitizer == 'address+undefined'
+        env:
+          ASAN_OPTIONS: detect_leaks=1:halt_on_error=1:abort_on_error=1
+          UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+        run: BUILD_DIR=build-san scripts/failure_cluster_test.sh
+
       - name: Run tests under the sanitizer
         env:
           # halt_on_error keeps the first ASan/UBSan report as the failure
@@ -200,8 +211,11 @@ jobs:
       - name: Linux smoke test (epoll, cluster, replication, quorum, recovery)
         run: scripts/linux_smoke_test.sh
 
-      - name: Failure injection
+      - name: Failure injection (single broker)
         run: scripts/failure_test.sh
+
+      - name: Failure injection (three-broker cluster)
+        run: scripts/failure_cluster_test.sh
 
       - name: Upload logs on failure
         if: failure()
