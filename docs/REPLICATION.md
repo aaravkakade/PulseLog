@@ -82,6 +82,57 @@ A leader that cannot reach a quorum refuses the write with
 for. Silently degrading would be the worst possible behaviour: the producer
 would believe it had a guarantee it did not have.
 
+### Quorum acknowledgement, end to end
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant P as Producer
+    participant L as Leader (broker 0)
+    participant LF as Leader flusher
+    participant F1 as Follower 1
+    participant F2 as Follower 2
+
+    P->>L: produce(acks=quorum)
+    L->>L: append; log_end = N+1
+    L->>L: register waiter needing<br/>flushed > N on a majority
+
+    Note over L,F2: replication and the local flush race;<br/>neither is ordered before the other
+
+    par leader flushes its own copy
+        LF->>LF: fsync
+        LF->>L: flushed offset = N+1<br/>(counts as one replica)
+    and leader ships to followers
+        L->>F1: REPLICATE, prev_offset = N-1
+        F1->>F1: append
+        F1-->>L: log_end = N+1, flushed = M (stale)
+        L->>F2: REPLICATE, prev_offset = N-1
+        F2->>F2: append
+        F2-->>L: log_end = N+1, flushed = M (stale)
+    end
+
+    Note over L,F1: followers are caught up but not yet durable,<br/>so the leader keeps probing
+
+    L->>F1: REPLICATE, record_count = 0 (progress probe)
+    F1->>F1: its flusher has since run
+    F1-->>L: log_end = N+1, flushed = N+1
+
+    L->>L: leader + follower 1 have flushed past N<br/>= 2 of 3 = quorum
+    L-->>P: acknowledged
+```
+
+Two properties of this diagram are load-bearing.
+
+**The local flush and replication are unordered.** Either can complete first,
+so the waiter is re-evaluated on both events. A missed wake-up here is not a
+slow acknowledgement, it is a `TIMEOUT` on a write that is fully durable
+everywhere — which is exactly the bug fixed by re-checking waiters on
+partitions the flusher finds nothing to flush on.
+
+**The probe in step 11 is not an optimisation.** Without it the sequence stops
+at step 10 with every replica durable and the leader unaware, and the producer
+waits out its deadline.
+
 ### The progress probe
 
 A follower reports its flushed offset in the *response* to a batch — but its own

@@ -164,6 +164,48 @@ not be in its directory.
 
 ## 4. Recovery
 
+```mermaid
+flowchart TD
+    START(["Broker starts;<br/>open partition directory"]) --> LIST["List *.log files,<br/>parse 20-digit base offsets"]
+    LIST --> EMPTY{"Any segments?"}
+    EMPTY -->|no| FRESH["Create segment at offset 0;<br/>log_start = log_end = 0"]
+    EMPTY -->|yes| SEAL["For each segment in order"]
+
+    SEAL --> LAST{"Is this the<br/>last segment?"}
+    LAST -->|"no — sealed when it rolled"| SKIP["Trust it; take next_offset<br/>from the index"]
+    LAST -->|yes| IDX["Read the sparse index;<br/>seek to the last indexed position"]
+
+    IDX --> SCAN["Scan forward record by record<br/>from that position"]
+    SCAN --> CHECK{"Record intact?<br/>length sane AND<br/>CRC-32C matches"}
+    CHECK -->|yes| ADV["Advance next_offset;<br/>continue"]
+    ADV --> SCAN
+    CHECK -->|"no — torn write<br/>or corruption"| TRUNC["Truncate the file here.<br/>Everything before this point<br/>stays readable"]
+
+    SCAN -->|end of file| DONE
+    TRUNC --> DONE["log_end = next_offset<br/>flushed_offset = next_offset"]
+    SKIP --> SEAL
+    FRESH --> READY
+    DONE --> READY(["Serving"])
+```
+
+Recovery scans forward from the **last index entry**, not from the start of the
+segment, which is why recovery time tracks the sparse index interval rather
+than the size of the log. Measured: 0.052 s to serve a 205,000-record log again
+after `SIGKILL` ([PERFORMANCE_RESULTS.md §3.1](PERFORMANCE_RESULTS.md#31-linux-x86-64-primary)).
+
+Only the last segment can have a torn tail — earlier ones were sealed when they
+rolled — so scanning them all would make recovery time grow with the whole log
+instead of with one segment. Damage found in a sealed segment is logged as an
+error, because data after it is unreachable and that is not something to
+recover from silently.
+
+A partial record at the tail is the expected case after a crash, not an
+exception: a `pwrite` that was in flight when the process died leaves exactly
+that. The record is dropped and the offset it would have had is reused. No
+acknowledged record is lost, because an acknowledgement under `acks=quorum`
+required a flush that completed before the crash.
+
+
 On open, each segment is scanned forward from its **last index entry**, not
 from byte 0. Everything before that entry was validated when the entry was
 written, so recovery work is bounded by `index_interval_bytes` in the common

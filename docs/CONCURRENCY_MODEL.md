@@ -30,6 +30,49 @@ no thread can outlive the state it points at.
 
 ## 2. Ownership map
 
+```mermaid
+flowchart LR
+    subgraph exclusive["Single-owner state — no synchronisation"]
+        direction TB
+        A1["accept thread"] -.->|hands off socket| I1
+        I1["io loop 0..N"] --- IS["per-connection buffers,<br/>decoder, output queue,<br/>connection registry"]
+        W1["partition worker 0..M"] --- WS["partition logs:<br/>segments, indexes,<br/>offsets, buffer pool"]
+    end
+
+    subgraph shared["Shared state — synchronised"]
+        direction TB
+        MD["cluster + topic metadata<br/><i>shared_mutex</i>"]
+        PM["partition map<br/><i>shared_mutex, exclusive<br/>only on create/delete</i>"]
+        CG["consumer-group state<br/><i>mutex</i>"]
+        DW["durability waiters,<br/>follower progress<br/><i>per-partition mutex</i>"]
+        MX["metric counters<br/><i>relaxed atomics</i>"]
+    end
+
+    I1 -->|bounded queue,<br/>hash&lpar;topic,partition&rpar; % M| W1
+    W1 -->|completion posted<br/>back to the owning loop| I1
+
+    F["flusher"] --> WS
+    F --> DW
+    RS["replication senders"] --> DW
+    MT["maintenance"] --> PM
+    MS["metrics sampler"] --> MX
+    MH["metrics HTTP"] --> MX
+
+    W1 --> MD
+    W1 --> PM
+    W1 --> CG
+    W1 --> DW
+```
+
+Solid arrows are the only paths that cross a thread boundary. Everything inside
+the left box is reached by exactly one thread and needs no synchronisation at
+all; everything in the right box names the primitive that guards it.
+
+The flusher and the replication senders touch partition logs that a worker
+owns. That is the one exception, and §4 is the argument for why it is safe:
+they only ever read below `end_position_`, which the writer publishes with a
+release store after the data is in place.
+
 | State | Owner | How others reach it |
 |---|---|---|
 | A connection's buffers, decoder, output queue | Its io loop thread | Not at all |

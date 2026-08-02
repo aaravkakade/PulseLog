@@ -15,39 +15,42 @@ Kafka deployment provides.
 Modules are separate CMake targets so the dependency direction is enforced by
 the build, not by convention. An arrow means "depends on".
 
+```mermaid
+flowchart TD
+    base["<b>base</b><br/>Status/Result, buffers,<br/>CRC-32C, config, logging, clocks"]
+
+    concurrency["<b>concurrency</b><br/>bounded queues,<br/>thread utilities"]
+    metrics["<b>metrics</b><br/>counters, gauges,<br/>HDR histograms"]
+    protocol["<b>protocol</b><br/>frames, opcodes,<br/>record codec"]
+
+    storage["<b>storage</b><br/>segments, sparse index,<br/>recovery, retention"]
+    net["<b>net</b><br/>poller, event loop,<br/>connections, framing"]
+
+    metadata["<b>metadata</b><br/>cluster view,<br/>partition assignment"]
+    replication["<b>replication</b><br/>leader push,<br/>follower progress"]
+    consumer["<b>consumer</b><br/>groups, assignment,<br/>offset store"]
+
+    broker["<b>broker</b><br/>request routing, partition ownership,<br/>worker threads, lifecycle"]
+
+    base --> concurrency
+    base --> metrics
+    base --> protocol
+    protocol --> storage
+    concurrency --> net
+    metrics --> net
+    storage --> net
+    net --> metadata
+    net --> replication
+    net --> consumer
+    metadata --> broker
+    replication --> broker
+    consumer --> broker
 ```
-                       ┌──────────┐
-                       │   base   │  Status/Result, buffers, CRC32C,
-                       └────┬─────┘  config, logging, clocks
-                            │
-              ┌─────────────┼──────────────┐
-              ▼             ▼              ▼
-      ┌──────────────┐ ┌─────────┐  ┌──────────┐
-      │ concurrency  │ │ metrics │  │ protocol │  frames, opcodes, codec
-      └──────┬───────┘ └────┬────┘  └────┬─────┘
-             │              │            │
-             │              │            ▼
-             │              │      ┌──────────┐
-             │              │      │ storage  │  segments, index, recovery
-             │              │      └────┬─────┘
-             │              │           │
-             ▼              ▼           ▼
-      ┌────────────────────────────────────────┐
-      │                  net                   │  poller, event loop,
-      └──────────────────┬─────────────────────┘  connections, framing
-                         │
-        ┌────────────────┼────────────────┐
-        ▼                ▼                ▼
-  ┌──────────┐   ┌─────────────┐   ┌──────────┐
-  │ metadata │   │ replication │   │ consumer │  groups, assignment,
-  └────┬─────┘   └──────┬──────┘   └────┬─────┘  offset store
-       │                │               │
-       └────────────────┼───────────────┘
-                        ▼
-                  ┌──────────┐
-                  │  broker  │  request routing, partition ownership,
-                  └──────────┘  worker threads, lifecycle
-```
+
+The `broker` target is split internally into `broker_core` and `broker` to
+break a cycle: replication needs to read a partition replica, and the broker
+needs to drive replication. `broker_core` holds the partition types both sides
+share.
 
 `storage` cannot include anything from `net`; `protocol` knows nothing about
 either. That keeps the log engine testable without a socket and the codec
@@ -100,24 +103,52 @@ other: a slow disk stalls one worker, not the socket that fed it.
 
 ## 3. Request lifecycle: produce
 
+```mermaid
+sequenceDiagram
+    autonumber
+    participant C as Client
+    participant IO as io loop<br/>(epoll/kqueue)
+    participant W as partition worker<br/>(affine by topic+partition)
+    participant L as partition log
+    participant F as flusher thread
+    participant R as replication sender
+
+    C->>IO: produce frame
+    IO->>IO: parse 32-byte header
+    IO->>IO: verify header CRC<br/>(before payload_len is trusted)
+    IO->>IO: wait for full body
+    IO->>IO: verify payload CRC
+    IO->>W: route by hash(topic, partition)<br/>bounded queue
+
+    Note over IO,W: queue full → BACKPRESSURE reply,<br/>never an unbounded buffer
+
+    W->>W: decode, resolve partition, check leadership
+    W->>L: append, assigning offsets in place
+    L-->>W: base offset, last offset
+
+    alt acks=none
+        W-->>C: reply immediately
+    else acks=leader
+        W-->>C: reply once the record is in the log
+    else acks=quorum
+        W->>W: register durability waiter
+        par leader flush
+            F->>L: fsync (group commit)
+            L-->>W: flushed offset advanced
+        and follower replication
+            R->>R: ship batch to followers
+            R->>W: follower progress<br/>(log end + flushed offset)
+        end
+        W->>W: quorum of replicas flushed past<br/>the required offset?
+        W-->>C: reply
+    end
 ```
- client            io loop                worker               flusher
-   │                  │                     │                     │
-   ├─ frame ─────────▶│                     │                     │
-   │                  ├─ parse header       │                     │
-   │                  ├─ verify header CRC  │                     │
-   │                  ├─ wait for full body │                     │
-   │                  ├─ verify payload CRC │                     │
-   │                  ├─ route by partition─▶ bounded queue        │
-   │                  │                     ├─ append to segment   │
-   │                  │                     ├─ update index        │
-   │                  │                     ├─ assign offsets      │
-   │                  │                     ├─ (acks=none) reply   │
-   │                  │                     ├─ register durability─▶
-   │                  │                     │   waiter             ├─ fsync
-   │                  │◀── completion ──────┼─────────────────────┤
-   │◀─ response ──────┤                     │                     │
-```
+
+The four stages the broker times separately map onto this diagram: **queue
+wait** is step 6 to step 7, **append** is step 8, **local flush** is the
+leader's `fsync` branch, and **replication** is the wait for follower progress
+after the leader has flushed. Their measured split is in
+[PERFORMANCE_RESULTS.md §5.1](PERFORMANCE_RESULTS.md#51-the-stage-breakdown).
 
 Backpressure is applied at the "route by partition" step: the per-worker queue
 is bounded, and a full queue produces a `BACKPRESSURE` response rather than an
