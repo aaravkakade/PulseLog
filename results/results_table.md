@@ -18,16 +18,16 @@ Median of all trials per scenario. Latency is per produce request; with batching
 
 | Scenario | Config | records/s (median) | spread | MiB/s | p50 | p99 | p99.9 | err |
 |---|---|---:|---:|---:|---:|---:|---:|---:|
-| 01-single-producer-no-replication | `1p/1part/b100/128B/leader` | 861,344 | 784,807-1,017,269 | 128.1 | 39 us | 349 us | 15,278 us | 0 |
-| 02-multi-producer-one-partition | `4p/1part/b100/128B/leader` | 1,850,569 | 871,593-2,392,495 | 275.3 | 84 us | 2,646 us | 20,808 us | 0 |
-| 03-multi-producer-multi-partition | `4p/8part/b100/128B/leader` | 971,961 | 866,114-1,150,219 | 144.6 | 72 us | 7,287 us | 10,641 us | 0 |
-| 04-concurrent-producers-consumers | `4p/4part/b100/128B/leader` | 1,197,498 | 951,462-1,627,036 | 178.2 | 89 us | 6,140 us | 8,008 us | 0 |
-| 05-leader-ack | `4p/4part/b100/128B/leader` | 1,301,128 | 1,191,211-2,013,511 | 193.6 | 87 us | 8,495 us | 9,675 us | 0 |
-| 06-quorum-ack | `4p/4part/b100/128B/quorum` | 26,147 | 20,315-61,532 | 3.9 | 15,385 us | 19,890 us | 20,382 us | 0 |
-| 07-replication-under-load | `4p/6part/b100/128B/leader` | 398,581 | 131,668-500,937 | 59.3 | 164 us | 14,574 us | 20,939 us | 0 |
-| 08-no-batching | `4p/4part/b1/128B/leader` | 83,865 | 78,908-85,945 | 12.5 | 38 us | 113 us | 2,259 us | 0 |
-| 09-small-message | `4p/4part/b200/16B/leader` | 3,119,652 | 2,691,146-3,256,432 | 127.9 | 87 us | 3,592 us | 6,332 us | 0 |
-| 10-large-message | `4p/4part/b4/65536B/leader` | 6,619 | 3,728-10,227 | 413.9 | 514 us | 28,017 us | 49,611 us | 0 |
-| 11-acks-none | `4p/4part/b100/128B/none` | 600,651 | 409,202-976,624 | 89.4 | 77 us | 19,661 us | 31,031 us | 0 |
-| 12-fsync-full-vs-data | `4p/4part/b100/128B/leader` | 2,529,461 | 2,080,046-3,141,181 | 376.3 | 60 us | 3,260 us | 6,443 us | 0 |
-| 13-baseline-mutex-queue | `4p/1part/b1/128B/leader` | 5,225,821 | 4,466,670-5,341,729 | 637.9 | 0 us | 11 us | 24 us | 0 |
+| 01-single-producer-no-replication | `1p/1part/b100/128B/leader` | 1,036,382 | 823,340-1,157,141 | 154.2 | 37 us | 871 us | 8,798 us | 0 |
+| 02-multi-producer-one-partition | `4p/1part/b100/128B/leader` | 2,490,528 | 1,403,758-2,794,517 | 370.5 | 76 us | 2,427 us | 10,723 us | 0 |
+| 03-multi-producer-multi-partition | `4p/8part/b100/128B/leader` | 1,142,777 | 932,877-1,870,111 | 170.0 | 84 us | 3,478 us | 11,346 us | 0 |
+| 04-concurrent-producers-consumers | `4p/4part/b100/128B/leader` | 1,286,244 | 1,127,381-1,665,872 | 191.4 | 87 us | 3,049 us | 3,869 us | 0 |
+| 05-leader-ack | `4p/4part/b100/128B/leader` | 2,160,036 | 1,887,207-2,712,154 | 321.4 | 63 us | 3,181 us | 5,632 us | 0 |
+| 06-quorum-ack | `4p/4part/b100/128B/quorum` | 27,761 | 22,909-39,611 | 4.1 | 13,730 us | 22,495 us | 24,003 us | 0 |
+| 07-replication-under-load | `4p/6part/b100/128B/leader` | 416,873 | 368,874-511,590 | 62.0 | 169 us | 16,728 us | 25,182 us | 0 |
+| 08-no-batching | `4p/4part/b1/128B/leader` | 59,631 | 51,307-82,331 | 8.9 | 39 us | 129 us | 9,224 us | 0 |
+| 09-small-message | `4p/4part/b200/16B/leader` | 4,009,087 | 3,820,558-5,821,184 | 164.4 | 59 us | 3,052 us | 3,281 us | 0 |
+| 10-large-message | `4p/4part/b4/65536B/leader` | 2,846 | 1,538-6,333 | 177.9 | 596 us | 84,083 us | 115,081 us | 0 |
+| 11-acks-none | `4p/4part/b100/128B/none` | 663,092 | 503,750-868,535 | 98.7 | 131 us | 12,755 us | 17,465 us | 0 |
+| 12-fsync-full-vs-data | `4p/4part/b100/128B/leader` | 739,356 | 596,289-982,057 | 110.0 | 110 us | 14,041 us | 17,302 us | 0 |
+| 13-baseline-mutex-queue | `4p/1part/b1/128B/leader` | 4,896,785 | 3,326,252-5,369,854 | 597.8 | 0 us | 14 us | 39 us | 0 |

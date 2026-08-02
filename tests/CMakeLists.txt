@@ -4,7 +4,9 @@ include(GoogleTest)
 function(pulselog_add_test NAME)
   cmake_parse_arguments(ARG "" "" "SOURCES;DEPS" ${ARGN})
   add_executable(${NAME} ${ARG_SOURCES})
-  target_link_libraries(${NAME} PRIVATE ${ARG_DEPS} GTest::gtest GTest::gtest_main
+  # gtest_main already links gtest; naming both makes Apple's linker warn
+  # about a duplicate library on every test target.
+  target_link_libraries(${NAME} PRIVATE ${ARG_DEPS} GTest::gtest_main
                                         pulselog::warnings pulselog::sanitizers)
   target_include_directories(${NAME} PRIVATE "${PROJECT_SOURCE_DIR}/tests")
   set_target_properties(${NAME} PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON)

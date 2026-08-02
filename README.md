@@ -168,27 +168,28 @@ with Client("127.0.0.1:9092") as client:
 
 ## Measured performance
 
-Apple M2 (8 cores), macOS 14.5, APFS, Apple clang 15, `-O2`. Median of 5 trials;
+Apple M2 (8 cores), macOS 14.5, APFS, Apple clang 15, `-O2`. Median of 5 trials,
+from the JSON committed in `results/`;
 the spread is shown because this is a thermally constrained laptop, not a
 benchmark host. Latency is **per produce request** — with `batch=100` one
 request carries 100 records.
 
 | Scenario | records/s | spread | p50 | p99 |
 |---|---:|---:|---:|---:|
-| Single producer, 1 partition, batch 100 | 861,344 | 785k–1,017k | 39 µs | 349 µs |
-| 4 producers, 1 partition, batch 100 | 1,850,569 | 872k–2,392k | 84 µs | 2.6 ms |
-| 4 producers, 16-byte values, batch 200 | 3,119,652 | 2,691k–3,256k | 87 µs | 3.6 ms |
-| 4 producers, 64 KiB values | 6,619 (414 MiB/s) | 3.7k–10.2k | 514 µs | 28 ms |
-| No batching (batch 1) | 83,865 | 79k–86k | 38 µs | 113 µs |
-| `acks=quorum` (durable) | 26,147 | 20k–62k | 15 ms | 20 ms |
-| 3 brokers, replication factor 3 | 398,581 | 132k–501k | 164 µs | 14.6 ms |
-| Baseline: in-process mutex queue | 5,225,821 | 4,467k–5,342k | <1 µs | 11 µs |
+| Single producer, 1 partition, batch 100 | 1,036,382 | 823k–1,157k | 37 µs | 871 µs |
+| 4 producers, 1 partition, batch 100 | 2,490,528 | 1,404k–2,795k | 76 µs | 2.4 ms |
+| 4 producers, 16-byte values, batch 200 | 4,009,087 | 3,821k–5,821k | 59 µs | 3.1 ms |
+| 4 producers, 64 KiB values | 2,846 (178 MiB/s) | 1.5k–6.3k | 596 µs | 84 ms |
+| No batching (batch 1) | 59,631 | 51k–82k | 39 µs | 129 µs |
+| `acks=quorum` (durable) | 27,761 | 23k–40k | 13.7 ms | 22.5 ms |
+| 3 brokers, replication factor 3 | 416,873 | 369k–512k | 169 µs | 16.7 ms |
+| Baseline: in-process mutex queue | 4,896,785 | 3,326k–5,370k | <1 µs | 14 µs |
 
 Reading these honestly:
 
 * **Batching is the dominant effect**: 32k → 1.34M records/s from batch 1 to
   batch 100 on one producer, for 9 µs of added p50.
-* PulseLog reaches **36% of a bare mutex-protected in-memory queue** while
+* PulseLog reaches **51% of a bare mutex-protected in-memory queue** while
   doing TCP framing, CRC-32C everywhere, offset assignment and durable
   segmented storage.
 * **Durable mode is expensive on this machine** and misses the

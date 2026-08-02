@@ -59,21 +59,21 @@ not as a hardware capability claim.
 Median of 5 trials. `4p/8part/b100/128B/leader` reads as 4 producers,
 8 partitions, batch size 100, 128-byte values, `acks=leader`.
 
-| Scenario | Config | records/s (median) | spread | MiB/s | p50 | p99 | err |
-|---|---|---:|---:|---:|---:|---:|---:|
-| 01 single producer, no replication | `1p/1part/b100/128B/leader` | 861,344 | 785k–1,017k | 128 | 39 µs | 349 µs | 0 |
-| 02 multi-producer, one partition | `4p/1part/b100/128B/leader` | 1,850,569 | 872k–2,392k | 275 | 84 µs | 2,646 µs | 0 |
-| 03 multi-producer, multi-partition | `4p/8part/b100/128B/leader` | 971,961 | 866k–1,150k | 145 | 72 µs | 7,287 µs | 0 |
-| 04 producers + consumers | `4p/4part/b100/128B/leader` | 1,197,498 | 951k–1,627k | 178 | 89 µs | 6,140 µs | 0 |
-| 05 leader ack | `4p/4part/b100/128B/leader` | 1,301,128 | 1,191k–2,014k | 194 | 87 µs | 8,495 µs | 0 |
-| 06 quorum ack | `4p/4part/b100/128B/quorum` | 26,147 | 20k–62k | 3.9 | 15,385 µs | 19,890 µs | 0 |
-| 07 replication under load (3 brokers, RF=3) | `4p/6part/b100/128B/leader` | 398,581 | 132k–501k | 59 | 164 µs | 14,574 µs | 0 |
-| 08 no batching | `4p/4part/b1/128B/leader` | 83,865 | 79k–86k | 12.5 | 38 µs | 113 µs | 0 |
-| 09 small message | `4p/4part/b200/16B/leader` | 3,119,652 | 2,691k–3,256k | 128 | 87 µs | 3,592 µs | 0 |
-| 10 large message | `4p/4part/b4/65536B/leader` | 6,619 | 3.7k–10.2k | 414 | 514 µs | 28,017 µs | 0 |
-| 11 acks=none | `4p/4part/b100/128B/none` | 600,651 | 409k–977k | 89 | 77 µs | 19,661 µs | 0 |
-| 12 `fsync.mode=data` | `4p/4part/b100/128B/leader` | 2,529,461 | 2,080k–3,141k | 376 | 60 µs | 3,260 µs | 0 |
-| 13 baseline: mutex queue | `4p/1part/b1/128B` (in-process) | 5,225,821 | 4,467k–5,342k | 638 | <1 µs | 11 µs | 0 |
+| Scenario | Config | records/s (median) | spread | p50 | p99 | err |
+|---|---|---:|---:|---:|---:|---:|
+| 01 single producer, no replication | `1p/1part/b100/128B/leader` | 1,036,382 | 823k–1,157k | 37 µs | 871 µs | 0 |
+| 02 multi-producer, one partition | `4p/1part/b100/128B/leader` | 2,490,528 | 1,404k–2,795k | 76 µs | 2,427 µs | 0 |
+| 03 multi-producer, multi-partition | `4p/8part/b100/128B/leader` | 1,142,777 | 933k–1,870k | 84 µs | 3,478 µs | 0 |
+| 04 producers + consumers | `4p/4part/b100/128B/leader` | 1,286,244 | 1,127k–1,666k | 87 µs | 3,049 µs | 0 |
+| 05 leader ack | `4p/4part/b100/128B/leader` | 2,160,036 | 1,887k–2,712k | 63 µs | 3,181 µs | 0 |
+| 06 quorum ack | `4p/4part/b100/128B/quorum` | 27,761 | 23k–40k | 13,730 µs | 22,495 µs | 0 |
+| 07 replication under load (3 brokers, RF=3) | `4p/6part/b100/128B/leader` | 416,873 | 369k–512k | 169 µs | 16,728 µs | 0 |
+| 08 no batching | `4p/4part/b1/128B/leader` | 59,631 | 51k–82k | 39 µs | 129 µs | 0 |
+| 09 small message (16 B) | `4p/4part/b200/16B/leader` | 4,009,087 | 3,821k–5,821k | 59 µs | 3,052 µs | 0 |
+| 10 large message (64 KiB) | `4p/4part/b4/65536B/leader` | 2,846 (178 MiB/s) | 1.5k–6.3k | 596 µs | 84,083 µs | 0 |
+| 11 acks=none | `4p/4part/b100/128B/none` | 663,092 | 504k–869k | 131 µs | 12,755 µs | 0 |
+| 12 `fsync.mode=data` | `4p/4part/b100/128B/leader` | 739,356 | 596k–982k | 110 µs | 14,041 µs | 0 |
+| 13 baseline: mutex queue | `4p/1part/b1/128B` (in-process) | 4,896,785 | 3,326k–5,370k | <1 µs | 14 µs | 0 |
 
 Charts: `results/throughput.svg`, `results/latency_p99.svg`. Raw data, including
 every trial and the full environment, is one JSON file per scenario in
@@ -83,12 +83,12 @@ every trial and the full environment, is one JSON file per scenario in
 
 | Target | Result |
 |---|---|
-| >500,000 records/s on a single local broker, small batched messages | **Met.** 861k single-producer, 1.85M with four producers, 3.1M with 16-byte values |
-| Sub-millisecond median publish latency in memory-backed mode | **Met.** p50 is 38–89 µs across every non-quorum scenario |
+| >500,000 records/s on a single local broker, small batched messages | **Met.** 1.04M single-producer, 2.49M with four producers, 4.01M with 16-byte values |
+| Sub-millisecond median publish latency in memory-backed mode | **Met.** p50 is 37–169 µs across every non-quorum scenario |
 | Low-single-digit-millisecond p99 in durable mode | **Not met on this machine.** Quorum p99 is ~20 ms, dominated by device commit latency (§5) |
-| Recover partition state within seconds after abrupt restart | **Met, with room to spare.** 0.12 s for a 400-record partition after SIGKILL; see §6 |
+| Recover partition state within seconds after abrupt restart | **Met, with room to spare.** 0.12-0.13 s for a 400-record partition after SIGKILL; see §6 |
 | Scale throughput as partitions and workers increase | **Partially.** Producer count scales cleanly; partition count does not (§4.2) |
-| Demonstrable gains from batching and buffer reuse | **Met.** Batching is a 22× effect, buffer pooling 30× (§4.1, §7) |
+| Demonstrable gains from batching and buffer reuse | **Met.** Batching is a 41× effect, buffer pooling 30× (§4.1, §7) |
 
 ---
 
@@ -129,7 +129,7 @@ is trading latency for concurrency, which is what a closed-loop load generator
 against a queueing system should do.
 
 Partition count, however, does **not** help: scenario 02 (1 partition,
-1.85M/s) beats scenario 03 (8 partitions, 0.97M/s). More partitions mean more
+2.49M/s) beats scenario 03 (8 partitions, 1.14M/s). More partitions mean more
 open segment files, more flush work spread across more files, and less batching
 per file. On this single-disk laptop, partitioning costs more than the
 parallelism it buys. On a machine with more IO parallelism the balance would
@@ -137,22 +137,26 @@ differ; this result is specific to the hardware and is not generalised here.
 
 ### 4.3 Small messages are framing-bound, large messages are device-bound
 
-* 16-byte values reach **3.1M records/s but only 128 MiB/s** — per-record
+* 16-byte values reach **4.0M records/s but only 164 MiB/s** — per-record
   framing (27 bytes) is larger than the payload, so the engine is doing
   bookkeeping, not moving data.
-* 64 KiB values reach only **6.6k records/s but 414 MiB/s** — the highest byte
-  rate of any scenario. The engine is out of the way and the disk is the limit.
+* 64 KiB values reach only **2.8k records/s but 178 MiB/s**, with a p99 of
+  84 ms and a 4x spread across trials. This is the least stable scenario in the
+  suite: each request carries 256 KiB, so a single flush stall lands squarely
+  on it. An earlier run of the same scenario reached 6.6k records/s and
+  414 MiB/s. Both are reported; neither should be quoted alone.
 
 ### 4.4 The mutex-queue baseline
 
 An in-process, mutex-protected `std::vector` with no networking, no protocol,
-no checksums and no disk reaches 5.2M records/s. PulseLog reaches 1.85M with
-four producers — **36% of a baseline that provides none of the guarantees**,
+no checksums and no disk reaches 4.90M records/s. PulseLog reaches 2.49M with
+four producers — **51% of a baseline that provides none of the guarantees**,
 while doing TCP framing, CRC-32C on every record and every frame, offset
 assignment, and durable segmented storage.
 
-That ratio is the honest way to read the throughput numbers: the remaining 64%
-is what those guarantees cost.
+That ratio is the honest way to read the throughput numbers: the other half is
+what those guarantees cost. Note that both figures carry a wide spread, so the
+ratio is "about half", not 51%.
 
 ---
 
@@ -186,11 +190,20 @@ The stall is in the filesystem, not in this code: appends take no lock that a
 flush holds, and the flusher runs on its own thread. On APFS, a `pwrite` to a
 file with an in-flight sync serialises behind it.
 
-**The `fsync.mode` knob is worth about 2×** (scenario 05 vs 12): 1.30M/s with
-`full` against 2.53M/s with `data`, same workload. `full` is the default anyway,
-because it is what quorum acknowledgements are *defined against* — a broker
-that acknowledges "durable" without reaching stable media is lying, and a
-2× number is not worth that.
+**The `fsync.mode` knob did not produce a reliable difference in the suite.**
+One 5-trial run showed `data` at 2.53M/s against `full` at 1.30M/s; a later run
+of the same two scenarios reversed the ordering (0.74M vs 2.16M). Both are
+inside the run-to-run spread, so **no speedup is claimed for it here**. The
+repeatable measurement is the flusher-disabled comparison above, where the same
+scenario was run three times in each configuration and the ranges did not
+overlap.
+
+`full` is the default regardless, because it is what quorum acknowledgements
+are *defined against*: a broker that acknowledges "durable" without reaching
+stable media is lying. The knob exists because on Linux `fdatasync` on a
+preallocated file is a genuinely different operation from `F_FULLFSYNC`, and
+that is worth being able to select — but it has not been shown to matter on
+this machine.
 
 This is a macOS-specific magnitude. On Linux, `fdatasync` on a preallocated
 file is substantially cheaper, and CI runs the same suite there.
