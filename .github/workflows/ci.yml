@@ -245,6 +245,18 @@ jobs:
         # publishes the spread across trials alongside the median.
         run: scripts/benchmark_release.sh --trials 5 --out results-linux
 
+      - name: Profile durable-mode tail latency
+        # acks=quorum is the slow path and an end-to-end number gives no
+        # purchase on it. This is also the only place the fsync-vs-fdatasync
+        # comparison is meaningful: on macOS the 'data' mode falls through to
+        # fsync, so the two modes are not the same experiment there.
+        run: |
+          python3 scripts/profile_durability.py \
+            --build-dir build-release \
+            --records 40000 \
+            --trials 5 \
+            --out results-linux/durability.json
+
       - name: Upload benchmark results
         if: always()
         uses: actions/upload-artifact@v4
