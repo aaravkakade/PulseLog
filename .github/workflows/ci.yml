@@ -1,7 +1,12 @@
 # CI runs on Linux, which is the deployment target. Development happens on
-# macOS, so this is also where the epoll backend and fdatasync path get
-# exercised at all -- worth remembering when reading a failure that does not
-# reproduce locally.
+# macOS, so this is also where the epoll backend, fdatasync, and GCC's warning
+# set get exercised at all -- a Linux-only failure here is a real platform
+# difference, not flakiness.
+#
+# Toolchains are whatever ubuntu-latest ships. Pinning to a version the image
+# does not have fails the job before a single line is compiled, which is a
+# worse outcome than tracking the image; the versions actually used are printed
+# by every build job.
 name: ci
 
 on:
@@ -19,24 +24,25 @@ env:
 
 jobs:
   build-and-test:
-    name: build + test (${{ matrix.compiler }}, ${{ matrix.build_type }})
+    name: build+test (${{ matrix.compiler }}, ${{ matrix.build_type }})
     runs-on: ubuntu-latest
+    timeout-minutes: 40
     strategy:
       fail-fast: false
       matrix:
         include:
           - compiler: gcc
-            cc: gcc-13
-            cxx: g++-13
-            build_type: RelWithDebInfo
-          - compiler: clang
-            cc: clang-17
-            cxx: clang++-17
+            cc: gcc
+            cxx: g++
             build_type: RelWithDebInfo
           - compiler: gcc
-            cc: gcc-13
-            cxx: g++-13
+            cc: gcc
+            cxx: g++
             build_type: Debug
+          - compiler: clang
+            cc: clang
+            cxx: clang++
+            build_type: RelWithDebInfo
 
     steps:
       - uses: actions/checkout@v4
@@ -44,12 +50,17 @@ jobs:
       - name: Install toolchain
         run: |
           sudo apt-get update
-          sudo apt-get install -y ninja-build cmake
-          if [ "${{ matrix.compiler }}" = "clang" ]; then
-            sudo apt-get install -y clang-17
-          else
-            sudo apt-get install -y gcc-13 g++-13
-          fi
+          sudo apt-get install -y --no-install-recommends ninja-build cmake
+
+      - name: Report versions
+        env:
+          CC: ${{ matrix.cc }}
+          CXX: ${{ matrix.cxx }}
+        run: |
+          echo "distro:   $(. /etc/os-release && echo "$PRETTY_NAME")"
+          echo "kernel:   $(uname -r) $(uname -m)"
+          echo "compiler: $($CXX --version | head -1)"
+          echo "cmake:    $(cmake --version | head -1)"
 
       - name: Configure
         env:
@@ -64,11 +75,29 @@ jobs:
         run: cmake --build build -j"$(nproc)"
 
       - name: Unit and integration tests
-        run: ctest --test-dir build --output-on-failure -j2 --timeout 180
+        run: ctest --test-dir build --output-on-failure -j2 --timeout 300
+
+      - name: Confirm the epoll backend was used
+        run: |
+          # The poller is selected at compile time. A Linux build that somehow
+          # chose kqueue would pass every test and validate nothing.
+          ./build/bin/pulselog-broker --broker.data.dir=/tmp/epoll-check \
+            --net.listen=127.0.0.1:19911 --metrics.enabled=false --log.level=info \
+            > /tmp/backend.log 2>&1 &
+          BROKER_PID=$!
+          for _ in $(seq 1 50); do
+            grep -q "broker started" /tmp/backend.log && break
+            sleep 0.2
+          done
+          kill "$BROKER_PID" 2>/dev/null || true
+          grep "poller=" /tmp/backend.log
+          grep -q "poller=epoll" /tmp/backend.log \
+            || { echo "expected the epoll backend on Linux"; cat /tmp/backend.log; exit 1; }
 
   sanitizers:
-    name: ${{ matrix.sanitizer }}
+    name: sanitizer (${{ matrix.sanitizer }})
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
@@ -80,12 +109,12 @@ jobs:
       - name: Install toolchain
         run: |
           sudo apt-get update
-          sudo apt-get install -y ninja-build cmake clang-17
+          sudo apt-get install -y --no-install-recommends ninja-build cmake clang
 
       - name: Configure
         env:
-          CC: clang-17
-          CXX: clang++-17
+          CC: clang
+          CXX: clang++
         run: |
           cmake -S . -B build-san \
             -DCMAKE_BUILD_TYPE=RelWithDebInfo \
@@ -98,33 +127,43 @@ jobs:
 
       - name: Run tests under the sanitizer
         env:
-          # halt_on_error keeps the first report as the failure rather than
-          # burying it under later ones.
+          # halt_on_error keeps the first ASan/UBSan report as the failure
+          # rather than burying it under later ones. TSan is left running so a
+          # single job surfaces every race it can find.
           ASAN_OPTIONS: detect_leaks=1:halt_on_error=1:abort_on_error=1
           UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
-          TSAN_OPTIONS: halt_on_error=1:second_deadlock_stack=1
-        run: ctest --test-dir build-san --output-on-failure -j1 --timeout 600
+          TSAN_OPTIONS: halt_on_error=0:second_deadlock_stack=1
+        run: ctest --test-dir build-san --output-on-failure -j1 --timeout 900
+
+  formatting:
+    name: clang-format
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check formatting
+        # The version is pinned in .clang-format-version and installed from
+        # PyPI, so this job and a developer's machine agree exactly. Without
+        # pinning, two clang-format majors disagree forever about a file
+        # neither of them touched.
+        run: scripts/format.sh --check
 
   static-analysis:
-    name: clang-tidy + clang-format
+    name: clang-tidy
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
       - name: Install toolchain
         run: |
           sudo apt-get update
-          sudo apt-get install -y ninja-build cmake clang-17 clang-tidy-17 clang-format-17
-
-      - name: Check formatting
-        run: |
-          files=$(git ls-files '*.cc' '*.h')
-          clang-format-17 --dry-run --Werror $files
+          sudo apt-get install -y --no-install-recommends ninja-build cmake clang clang-tidy
 
       - name: Configure (for compile_commands.json)
         env:
-          CC: clang-17
-          CXX: clang++-17
+          CC: clang
+          CXX: clang++
         run: |
           cmake -S . -B build \
             -DCMAKE_BUILD_TYPE=RelWithDebInfo \
@@ -133,25 +172,24 @@ jobs:
 
       - name: clang-tidy
         run: |
+          clang-tidy --version
           # Only our own sources; fetched dependencies are not ours to lint.
-          files=$(git ls-files 'src/*.cc' 'clients/cpp/src/*.cc' 'apps/*/*.cc')
-          clang-tidy-17 -p build --warnings-as-errors='*' $files
+          git ls-files 'src/*.cc' 'clients/cpp/src/*.cc' 'apps/*/*.cc' \
+            | xargs clang-tidy -p build --warnings-as-errors='*'
 
-  smoke-and-failure-injection:
-    name: end-to-end smoke + failure injection
+  linux-smoke:
+    name: Linux smoke + failure injection
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
       - name: Install toolchain
         run: |
           sudo apt-get update
-          sudo apt-get install -y ninja-build cmake g++-13
+          sudo apt-get install -y --no-install-recommends ninja-build cmake curl
 
-      - name: Build
-        env:
-          CC: gcc-13
-          CXX: g++-13
+      - name: Build (release)
         run: |
           cmake -S . -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo -DPULSELOG_WERROR=ON
           cmake --build build -j"$(nproc)"
@@ -159,23 +197,52 @@ jobs:
       - name: Single-broker smoke test
         run: scripts/smoke_test.sh
 
-      - name: Crash recovery and corruption handling
+      - name: Linux smoke test (epoll, cluster, replication, quorum, recovery)
+        run: scripts/linux_smoke_test.sh
+
+      - name: Failure injection
         run: scripts/failure_test.sh
 
-      - name: Quick benchmark run
-        run: |
-          python3 scripts/run_benchmarks.py --quick --trials=1 --out results
-          python3 scripts/plot_results.py --results results --out results
-
-      - name: Upload benchmark results
+      - name: Upload logs on failure
+        if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: benchmark-results
-          path: results/
+          name: smoke-logs
+          path: |
+            /tmp/pulselog-linux-smoke/
+            /tmp/*.log
+          if-no-files-found: ignore
+
+  benchmarks:
+    name: Linux x86-64 benchmarks
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ninja-build cmake python3
+
+      - name: Run the release benchmark suite
+        # A GitHub-hosted runner is a shared VM: absolute numbers carry more
+        # variance than dedicated hardware, which is why the report always
+        # publishes the spread across trials alongside the median.
+        run: scripts/benchmark_release.sh --trials 5 --out results-linux
+
+      - name: Upload benchmark results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-benchmark-results
+          path: results-linux/
+          if-no-files-found: warn
 
   docker:
     name: docker image + 3-broker cluster
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
@@ -183,7 +250,7 @@ jobs:
         run: docker build -f docker/Dockerfile -t pulselog:ci .
 
       - name: Start a three-broker cluster
-        run: docker compose -f docker/docker-compose.yml up -d --wait --wait-timeout 120
+        run: docker compose -f docker/docker-compose.yml up -d --wait --wait-timeout 180
 
       - name: Exercise it
         run: |
