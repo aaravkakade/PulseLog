@@ -1,0 +1,207 @@
+# CI runs on Linux, which is the deployment target. Development happens on
+# macOS, so this is also where the epoll backend and fdatasync path get
+# exercised at all -- worth remembering when reading a failure that does not
+# reproduce locally.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CMAKE_GENERATOR: Ninja
+
+jobs:
+  build-and-test:
+    name: build + test (${{ matrix.compiler }}, ${{ matrix.build_type }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - compiler: gcc
+            cc: gcc-13
+            cxx: g++-13
+            build_type: RelWithDebInfo
+          - compiler: clang
+            cc: clang-17
+            cxx: clang++-17
+            build_type: RelWithDebInfo
+          - compiler: gcc
+            cc: gcc-13
+            cxx: g++-13
+            build_type: Debug
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build cmake
+          if [ "${{ matrix.compiler }}" = "clang" ]; then
+            sudo apt-get install -y clang-17
+          else
+            sudo apt-get install -y gcc-13 g++-13
+          fi
+
+      - name: Configure
+        env:
+          CC: ${{ matrix.cc }}
+          CXX: ${{ matrix.cxx }}
+        run: |
+          cmake -S . -B build \
+            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+            -DPULSELOG_WERROR=ON
+
+      - name: Build
+        run: cmake --build build -j"$(nproc)"
+
+      - name: Unit and integration tests
+        run: ctest --test-dir build --output-on-failure -j2 --timeout 180
+
+  sanitizers:
+    name: ${{ matrix.sanitizer }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        sanitizer: [address+undefined, thread]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build cmake clang-17
+
+      - name: Configure
+        env:
+          CC: clang-17
+          CXX: clang++-17
+        run: |
+          cmake -S . -B build-san \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DPULSELOG_SANITIZER=${{ matrix.sanitizer }} \
+            -DPULSELOG_BUILD_BENCHMARKS=OFF \
+            -DPULSELOG_WERROR=ON
+
+      - name: Build
+        run: cmake --build build-san -j"$(nproc)"
+
+      - name: Run tests under the sanitizer
+        env:
+          # halt_on_error keeps the first report as the failure rather than
+          # burying it under later ones.
+          ASAN_OPTIONS: detect_leaks=1:halt_on_error=1:abort_on_error=1
+          UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+          TSAN_OPTIONS: halt_on_error=1:second_deadlock_stack=1
+        run: ctest --test-dir build-san --output-on-failure -j1 --timeout 600
+
+  static-analysis:
+    name: clang-tidy + clang-format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build cmake clang-17 clang-tidy-17 clang-format-17
+
+      - name: Check formatting
+        run: |
+          files=$(git ls-files '*.cc' '*.h')
+          clang-format-17 --dry-run --Werror $files
+
+      - name: Configure (for compile_commands.json)
+        env:
+          CC: clang-17
+          CXX: clang++-17
+        run: |
+          cmake -S . -B build \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DPULSELOG_BUILD_TESTS=OFF \
+            -DPULSELOG_BUILD_BENCHMARKS=OFF
+
+      - name: clang-tidy
+        run: |
+          # Only our own sources; fetched dependencies are not ours to lint.
+          files=$(git ls-files 'src/*.cc' 'clients/cpp/src/*.cc' 'apps/*/*.cc')
+          clang-tidy-17 -p build --warnings-as-errors='*' $files
+
+  smoke-and-failure-injection:
+    name: end-to-end smoke + failure injection
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build cmake g++-13
+
+      - name: Build
+        env:
+          CC: gcc-13
+          CXX: g++-13
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo -DPULSELOG_WERROR=ON
+          cmake --build build -j"$(nproc)"
+
+      - name: Single-broker smoke test
+        run: scripts/smoke_test.sh
+
+      - name: Crash recovery and corruption handling
+        run: scripts/failure_test.sh
+
+      - name: Quick benchmark run
+        run: |
+          python3 scripts/run_benchmarks.py --quick --trials=1 --out results
+          python3 scripts/plot_results.py --results results --out results
+
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results
+          path: results/
+
+  docker:
+    name: docker image + 3-broker cluster
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the image
+        run: docker build -f docker/Dockerfile -t pulselog:ci .
+
+      - name: Start a three-broker cluster
+        run: docker compose -f docker/docker-compose.yml up -d --wait --wait-timeout 120
+
+      - name: Exercise it
+        run: |
+          docker compose -f docker/docker-compose.yml exec -T pulselog-1 \
+            pulselog-cli create-topic ci-topic --partitions=6 --replication=3 \
+            --brokers=pulselog-1:9092
+          docker compose -f docker/docker-compose.yml exec -T pulselog-1 \
+            pulselog-cli produce ci-topic --value=hello --count=500 --batch=50 \
+            --acks=quorum --brokers=pulselog-1:9092
+          docker compose -f docker/docker-compose.yml exec -T pulselog-2 \
+            pulselog-cli metadata ci-topic --brokers=pulselog-2:9092
+          docker compose -f docker/docker-compose.yml exec -T pulselog-3 \
+            pulselog-cli offsets ci-topic --brokers=pulselog-3:9092
+
+      - name: Show logs on failure
+        if: failure()
+        run: docker compose -f docker/docker-compose.yml logs
+
+      - name: Tear down
+        if: always()
+        run: docker compose -f docker/docker-compose.yml down -v
