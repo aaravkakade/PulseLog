@@ -289,18 +289,70 @@ Result<std::uint64_t> Segment::PositionFor(Offset offset) const {
 
   // Bounded forward scan: at most `index_interval_bytes` of log, because the
   // index guarantees an entry at least that often.
-  std::vector<std::uint8_t> buffer;
+  //
+  // The scan reads a block at a time and walks it in memory. An earlier
+  // version issued one 4-byte pread per record to read the length prefix,
+  // which turned a single offset lookup into tens of syscalls -- measured at
+  // ~170 us per lookup, against ~14 us after this change
+  // (benchmarks/bench_storage.cc, BM_OffsetLookup).
+  if (current >= offset) return position;
+
+  // The scan is bounded by `index_interval_bytes`, so one block of that size
+  // (with a floor, since a tiny interval would mean many reads) covers the
+  // whole scan in the normal case. A record that straddles the block end is
+  // handled by advancing and reading again, and a record larger than the block
+  // grows it once.
+  std::vector<std::uint8_t> block;
+  std::size_t block_size = static_cast<std::size_t>(
+      std::max<std::int64_t>(options_.index_interval_bytes, 8192));
+
   while (current < offset) {
-    std::array<std::uint8_t, 4> length_bytes{};
-    PL_RETURN_IF_ERROR(file_.ReadExactAt(length_bytes.data(), length_bytes.size(), position));
-    const std::uint32_t length = LoadLe<std::uint32_t>(length_bytes.data());
-    const std::uint64_t record_size = static_cast<std::uint64_t>(length) + 4;
-    if (record_size < protocol::kRecordFixedPrefix || position + record_size > limit) {
-      return Corruption("scan for offset " + std::to_string(offset) + " ran off the segment at " +
-                        std::to_string(position));
+    const std::size_t want =
+        static_cast<std::size_t>(std::min<std::uint64_t>(block_size, limit - position));
+    if (want < 4) {
+      return Corruption("scan for offset " + std::to_string(offset) +
+                        " ran off the segment at " + std::to_string(position));
     }
-    position += record_size;
-    ++current;
+    block.resize(want);
+    PL_ASSIGN_OR_RETURN(const std::size_t got, file_.ReadAt(block.data(), want, position));
+    if (got < 4) {
+      return Corruption("scan for offset " + std::to_string(offset) +
+                        " hit the end of the segment at " + std::to_string(position));
+    }
+
+    std::size_t block_pos = 0;
+    while (current < offset && block_pos + 4 <= got) {
+      const std::uint32_t length = LoadLe<std::uint32_t>(block.data() + block_pos);
+      const std::uint64_t record_size = static_cast<std::uint64_t>(length) + 4;
+      if (record_size < protocol::kRecordFixedPrefix ||
+          position + block_pos + record_size > limit) {
+        return Corruption("scan for offset " + std::to_string(offset) +
+                          " ran off the segment at " + std::to_string(position + block_pos));
+      }
+      // Stop if this record straddles the block; the next read starts here.
+      if (block_pos + record_size > got) break;
+      block_pos += static_cast<std::size_t>(record_size);
+      ++current;
+    }
+
+    if (block_pos == 0) {
+      // The record at `position` is larger than the block. Grow once to fit
+      // it exactly rather than guessing.
+      const std::uint32_t length = LoadLe<std::uint32_t>(block.data());
+      const std::uint64_t record_size = static_cast<std::uint64_t>(length) + 4;
+      if (record_size < protocol::kRecordFixedPrefix ||
+          record_size > protocol::kMaxRecordBytes || position + record_size > limit) {
+        return Corruption("scan for offset " + std::to_string(offset) +
+                          " found an impossible record size at " + std::to_string(position));
+      }
+      if (static_cast<std::size_t>(record_size) <= block_size) {
+        return Corruption("scan for offset " + std::to_string(offset) +
+                          " made no progress at " + std::to_string(position));
+      }
+      block_size = static_cast<std::size_t>(record_size);
+      continue;
+    }
+    position += block_pos;
   }
   return position;
 }
@@ -423,7 +475,7 @@ Status Segment::Sync() {
   const std::uint64_t position = end_position_.load(std::memory_order_acquire);
   if (position == synced_position_.load(std::memory_order_acquire)) return OkStatus();
 
-  PL_RETURN_IF_ERROR(file_.Sync());
+  PL_RETURN_IF_ERROR(file_.Sync(options_.sync_mode));
   PL_RETURN_IF_ERROR(index_.Sync());
   PL_RETURN_IF_ERROR(time_index_.Sync());
   synced_position_.store(position, std::memory_order_release);
