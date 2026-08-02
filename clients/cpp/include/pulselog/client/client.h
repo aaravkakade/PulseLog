@@ -106,6 +106,11 @@ class ClientContext {
   // partition-scoped.
   [[nodiscard]] Result<net::SyncClient*> AnyBroker();
 
+  // Like LeaderFor, but falls back to any broker when the topic is not yet
+  // known -- the broker will auto-create it or redirect.
+  [[nodiscard]] Result<net::SyncClient*> LeaderOrAny(const std::string& topic,
+                                                     PartitionIndex partition);
+
   [[nodiscard]] Result<std::int32_t> PartitionCount(const std::string& topic);
 
   void InvalidateTopic(const std::string& topic);
@@ -115,13 +120,26 @@ class ClientContext {
   [[nodiscard]] const ClientConfig& config() const noexcept { return config_; }
 
   // Decodes a response payload, mapping the embedded error into a Status.
+  //
+  // The header is decoded first, on its own. An error response carries *only*
+  // a header -- there is no meaningful body to send when the operation failed
+  // -- so running the full typed decoder over it would fail on a truncated
+  // body and report PROTOCOL_ERROR instead of the real error. Reading the
+  // header first is what makes PROTOCOL.md's promise true: a client can always
+  // surface the error, even for a response body it cannot parse.
   template <typename Response>
   [[nodiscard]] static Status DecodeResponse(ByteSpan payload, Response& response) {
+    protocol::PayloadReader header_reader(payload);
+    if (!response.header.Decode(header_reader)) {
+      return ProtocolError("malformed response header");
+    }
+    if (!response.header.ok()) return response.header.ToStatus();
+
     protocol::PayloadReader reader(payload);
     if (!response.Decode(reader)) {
       return ProtocolError("malformed response payload");
     }
-    return response.header.ToStatus();
+    return OkStatus();
   }
 
   void CloseAll();

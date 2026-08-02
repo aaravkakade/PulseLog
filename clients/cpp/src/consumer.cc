@@ -216,8 +216,20 @@ Status Consumer::Heartbeat() {
   PL_ASSIGN_OR_RETURN(auto frame, connection->Call(protocol::OpCode::kHeartbeat,
                                                    context_.NextRequestId(), scratch_.Readable()));
   protocol::HeartbeatResponse response;
+  // Heartbeat is the one call whose error responses are still actionable --
+  // REBALANCE_IN_PROGRESS carries `rejoin_required` -- so the header is
+  // inspected without treating a non-OK code as a decode failure.
+  protocol::PayloadReader header_reader(frame.payload);
+  if (!response.header.Decode(header_reader)) {
+    return ProtocolError("malformed heartbeat response header");
+  }
   protocol::PayloadReader reader(frame.payload);
-  if (!response.Decode(reader)) return ProtocolError("malformed heartbeat response");
+  if (!response.Decode(reader)) {
+    // An error-only heartbeat response has no body; treat it as a signal to
+    // re-join rather than a protocol failure.
+    if (!response.header.ok()) return Join();
+    return ProtocolError("malformed heartbeat response");
+  }
 
   last_heartbeat_ms_ = MonotonicNanos() / 1'000'000;
   if (response.rejoin_required) {

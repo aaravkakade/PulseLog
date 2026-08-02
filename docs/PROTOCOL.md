@@ -143,6 +143,13 @@ error_message string
 so a client can surface a failure even for an operation whose success payload
 it does not understand.
 
+**An error response carries only the header.** When `error_code != 0` the
+body is omitted entirely — there is no meaningful `base_offset` to report for
+a produce that failed. A client must therefore decode the `ResponseHeader`
+first and only run the typed body decoder when the code is `OK`. Running the
+full decoder over an error response yields a truncation failure and would mask
+the real error with `PROTOCOL_ERROR`.
+
 ---
 
 ## 3. Record format
