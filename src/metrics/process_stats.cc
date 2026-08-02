@@ -1,11 +1,11 @@
 #include "pulselog/metrics/process_stats.h"
 
+#include <fstream>
+#include <thread>
+
 #include <sys/resource.h>
 #include <sys/utsname.h>
 #include <unistd.h>
-
-#include <fstream>
-#include <thread>
 
 #include "pulselog/base/clock.h"
 
@@ -23,8 +23,9 @@ std::uint64_t ReadResidentBytes() {
 #if defined(__APPLE__)
   ::mach_task_basic_info info{};
   mach_msg_type_number_t count = MACH_TASK_BASIC_INFO_COUNT;
-  if (::task_info(::mach_task_self(), MACH_TASK_BASIC_INFO, reinterpret_cast<task_info_t>(&info),
-                  &count) == KERN_SUCCESS) {
+  if (::task_info(
+          ::mach_task_self(), MACH_TASK_BASIC_INFO, reinterpret_cast<task_info_t>(&info), &count) ==
+      KERN_SUCCESS) {
     return info.resident_size;
   }
   return 0;
@@ -46,8 +47,9 @@ std::uint64_t ReadVirtualBytes() {
 #if defined(__APPLE__)
   ::mach_task_basic_info info{};
   mach_msg_type_number_t count = MACH_TASK_BASIC_INFO_COUNT;
-  if (::task_info(::mach_task_self(), MACH_TASK_BASIC_INFO, reinterpret_cast<task_info_t>(&info),
-                  &count) == KERN_SUCCESS) {
+  if (::task_info(
+          ::mach_task_self(), MACH_TASK_BASIC_INFO, reinterpret_cast<task_info_t>(&info), &count) ==
+      KERN_SUCCESS) {
     return info.virtual_size;
   }
   return 0;
@@ -136,7 +138,7 @@ ProcessStatsSampler::HostInfo ProcessStatsSampler::DescribeHost() {
         break;
       }
     }
-    struct ::sysinfo sys {};
+    struct ::sysinfo sys{};
     if (::sysinfo(&sys) == 0) {
       info.total_memory_bytes = static_cast<std::uint64_t>(sys.totalram) * sys.mem_unit;
     }

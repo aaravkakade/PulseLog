@@ -1,7 +1,7 @@
-#include <gtest/gtest.h>
-
 #include <cerrno>
 #include <string>
+
+#include <gtest/gtest.h>
 
 #include "pulselog/base/status.h"
 
@@ -94,9 +94,13 @@ TEST(Result, OkStatusWithoutValueBecomesInternal) {
   EXPECT_EQ(r.status().code(), ErrorCode::kInternal);
 }
 
-Status FailingStep() { return Unavailable("broker draining"); }
+Status FailingStep() {
+  return Unavailable("broker draining");
+}
 
-Result<int> FailingValueStep() { return TimedOut("deadline"); }
+Result<int> FailingValueStep() {
+  return TimedOut("deadline");
+}
 
 Status UsesReturnIfError() {
   PL_RETURN_IF_ERROR(FailingStep());

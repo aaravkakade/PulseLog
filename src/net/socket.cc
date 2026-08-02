@@ -1,5 +1,10 @@
 #include "pulselog/net/socket.h"
 
+#include <array>
+#include <cerrno>
+#include <charconv>
+#include <cstring>
+
 #include <arpa/inet.h>
 #include <fcntl.h>
 #include <netdb.h>
@@ -10,17 +15,14 @@
 #include <sys/uio.h>
 #include <unistd.h>
 
-#include <array>
-#include <cerrno>
-#include <charconv>
-#include <cstring>
-
 namespace pulselog::net {
 namespace {
 
 // Resolves an endpoint to a sockaddr. Numeric addresses are handled directly;
 // names go through getaddrinfo (used for Docker service names).
-Status ResolveEndpoint(const Endpoint& endpoint, ::sockaddr_storage& out, ::socklen_t& out_len,
+Status ResolveEndpoint(const Endpoint& endpoint,
+                       ::sockaddr_storage& out,
+                       ::socklen_t& out_len,
                        int& family) {
   std::memset(&out, 0, sizeof(out));
 
@@ -232,8 +234,7 @@ Result<TcpSocket> TcpSocket::ConnectAsync(const Endpoint& endpoint, bool& in_pro
   return ErrnoToStatus("connect " + endpoint.ToString(), errno);
 }
 
-Result<TcpSocket> TcpSocket::ConnectWithTimeout(const Endpoint& endpoint,
-                                                std::int64_t timeout_ms) {
+Result<TcpSocket> TcpSocket::ConnectWithTimeout(const Endpoint& endpoint, std::int64_t timeout_ms) {
   bool in_progress = false;
   PL_ASSIGN_OR_RETURN(TcpSocket socket, ConnectAsync(endpoint, in_progress));
   if (!in_progress) return socket;

@@ -56,7 +56,8 @@ std::size_t WriteVarUInt(std::uint8_t* dst, std::uint64_t v) noexcept {
 
 }  // namespace
 
-std::size_t EncodedRecordSize(bool key_is_null, std::size_t key_len,
+std::size_t EncodedRecordSize(bool key_is_null,
+                              std::size_t key_len,
                               std::size_t value_len) noexcept {
   const std::uint64_t key_field = key_is_null ? 0 : static_cast<std::uint64_t>(key_len) + 1;
   return kRecordFixedPrefix + VarUIntSize(key_field) +
@@ -64,10 +65,14 @@ std::size_t EncodedRecordSize(bool key_is_null, std::size_t key_len,
          value_len;
 }
 
-std::size_t AppendRecord(ByteBuffer& out, Offset offset, TimestampMs timestamp,
-                         std::uint8_t attributes, bool key_is_null, ByteSpan key, ByteSpan value) {
-  const std::size_t total =
-      EncodedRecordSize(key_is_null, key.size(), value.size());
+std::size_t AppendRecord(ByteBuffer& out,
+                         Offset offset,
+                         TimestampMs timestamp,
+                         std::uint8_t attributes,
+                         bool key_is_null,
+                         ByteSpan key,
+                         ByteSpan value) {
+  const std::size_t total = EncodedRecordSize(key_is_null, key.size(), value.size());
   out.EnsureWritable(total);
   std::uint8_t* dst = out.WritePtr();
 
@@ -104,7 +109,9 @@ void RewriteRecordOffset(std::uint8_t* record_start, std::size_t record_size, Of
   StoreLe<std::uint32_t>(record_start + kOffCrc, crc);
 }
 
-void RewriteRecordHeader(std::uint8_t* record_start, std::size_t record_size, Offset offset,
+void RewriteRecordHeader(std::uint8_t* record_start,
+                         std::size_t record_size,
+                         Offset offset,
                          TimestampMs timestamp) {
   StoreLeI64(record_start + kOffOffset, offset);
   StoreLeI64(record_start + kOffTimestamp, timestamp);
@@ -121,8 +128,8 @@ std::optional<std::uint32_t> PeekRecordLength(ByteSpan data, std::size_t pos) no
   return LoadLe<std::uint32_t>(data.data() + pos);
 }
 
-Status ParseRecord(ByteSpan data, std::size_t pos, bool verify_crc, RecordView& out,
-                   std::size_t& next_pos) {
+Status ParseRecord(
+    ByteSpan data, std::size_t pos, bool verify_crc, RecordView& out, std::size_t& next_pos) {
   if (pos + kRecordFixedPrefix > data.size()) {
     return OutOfRange("truncated record header at byte " + std::to_string(pos));
   }
@@ -136,9 +143,8 @@ Status ParseRecord(ByteSpan data, std::size_t pos, bool verify_crc, RecordView& 
   }
   const std::size_t total = static_cast<std::size_t>(length) + 4;
   if (pos + total > data.size()) {
-    return OutOfRange("record at byte " + std::to_string(pos) + " claims " +
-                      std::to_string(total) + " bytes but only " +
-                      std::to_string(data.size() - pos) + " remain");
+    return OutOfRange("record at byte " + std::to_string(pos) + " claims " + std::to_string(total) +
+                      " bytes but only " + std::to_string(data.size() - pos) + " remain");
   }
 
   const std::uint8_t* base = data.data() + pos;

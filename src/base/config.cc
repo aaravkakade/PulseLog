@@ -23,8 +23,9 @@ std::string_view Trim(std::string_view s) {
 
 std::string ToLower(std::string_view s) {
   std::string out(s);
-  std::transform(out.begin(), out.end(), out.begin(),
-                 [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+  std::transform(out.begin(), out.end(), out.begin(), [](unsigned char c) {
+    return static_cast<char>(std::tolower(c));
+  });
   return out;
 }
 
@@ -136,7 +137,9 @@ void ConfigStore::Set(std::string key, std::string value) {
   entries_[ToLower(key)] = std::move(value);
 }
 
-bool ConfigStore::Contains(std::string_view key) const { return entries_.find(key) != entries_.end(); }
+bool ConfigStore::Contains(std::string_view key) const {
+  return entries_.find(key) != entries_.end();
+}
 
 std::string ConfigStore::GetString(std::string_view key, std::string_view fallback) const {
   const auto it = entries_.find(key);
@@ -216,8 +219,7 @@ Result<std::int64_t> ConfigStore::GetBytes(std::string_view key, std::int64_t fa
   return parsed.value() * multiplier;
 }
 
-Result<std::int64_t> ConfigStore::GetDurationMs(std::string_view key,
-                                                std::int64_t fallback) const {
+Result<std::int64_t> ConfigStore::GetDurationMs(std::string_view key, std::int64_t fallback) const {
   const auto it = entries_.find(key);
   if (it == entries_.end()) return fallback;
 

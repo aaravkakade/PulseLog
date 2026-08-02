@@ -13,10 +13,11 @@
 #include <thread>
 #include <vector>
 
+#include "test_support/temp_dir.h"
+
 #include "pulselog/broker/broker.h"
 #include "pulselog/client/client.h"
 #include "pulselog/net/socket.h"
-#include "test_support/temp_dir.h"
 
 namespace pulselog::testing {
 
@@ -32,7 +33,7 @@ inline std::uint16_t PickFreePort() {
 // Polls `predicate` until it holds or the timeout expires. Tests assert on the
 // return value rather than sleeping a fixed amount, so they stay reliable on a
 // loaded machine without being slow on an idle one.
-template <typename Predicate>
+template<typename Predicate>
 bool WaitUntil(Predicate predicate, std::chrono::milliseconds timeout = std::chrono::seconds(10)) {
   const auto deadline = std::chrono::steady_clock::now() + timeout;
   while (std::chrono::steady_clock::now() < deadline) {
@@ -183,8 +184,10 @@ class ClusterFixture {
 };
 
 // Produces `count` records to one partition and returns the last offset.
-inline Result<Offset> ProduceRecords(client::Producer& producer, const std::string& topic,
-                                     PartitionIndex partition, int count,
+inline Result<Offset> ProduceRecords(client::Producer& producer,
+                                     const std::string& topic,
+                                     PartitionIndex partition,
+                                     int count,
                                      const std::string& value_prefix = "v",
                                      std::size_t value_padding = 0) {
   std::vector<client::OutboundRecord> records;
@@ -209,7 +212,8 @@ inline Result<Offset> ProduceRecords(client::Producer& producer, const std::stri
 // Reads every record from `from` up to the current end, following the log.
 inline Result<std::vector<std::string>> ConsumeAll(client::Consumer& consumer,
                                                    const std::string& topic,
-                                                   PartitionIndex partition, Offset from,
+                                                   PartitionIndex partition,
+                                                   Offset from,
                                                    int expected) {
   std::vector<std::string> values;
   Offset cursor = from;

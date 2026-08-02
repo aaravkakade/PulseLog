@@ -94,12 +94,17 @@ class Segment {
   // Appends already-encoded records whose offsets are already correct.
   // `record_count` and `last_offset` must describe the buffer; the segment
   // trusts them (the caller has just built or validated the bytes).
-  [[nodiscard]] Status AppendEncoded(ByteSpan records, Offset base_offset, Offset last_offset,
-                                     std::uint32_t record_count, TimestampMs max_timestamp);
+  [[nodiscard]] Status AppendEncoded(ByteSpan records,
+                                     Offset base_offset,
+                                     Offset last_offset,
+                                     std::uint32_t record_count,
+                                     TimestampMs max_timestamp);
 
   // Same, from several non-contiguous buffers written with one writev(2).
-  [[nodiscard]] Status AppendEncodedVectored(std::span<const ByteSpan> chunks, Offset base_offset,
-                                             Offset last_offset, std::uint32_t record_count,
+  [[nodiscard]] Status AppendEncodedVectored(std::span<const ByteSpan> chunks,
+                                             Offset base_offset,
+                                             Offset last_offset,
+                                             std::uint32_t record_count,
                                              TimestampMs max_timestamp);
 
   // Removes everything from `offset` onward. Used by follower log truncation
@@ -172,8 +177,11 @@ class Segment {
   [[nodiscard]] static std::optional<Offset> ParseBaseOffset(const std::string& stem);
 
  private:
-  [[nodiscard]] Status FinishAppend(std::size_t bytes, Offset base_offset, Offset last_offset,
-                                    std::uint32_t record_count, TimestampMs max_timestamp);
+  [[nodiscard]] Status FinishAppend(std::size_t bytes,
+                                    Offset base_offset,
+                                    Offset last_offset,
+                                    std::uint32_t record_count,
+                                    TimestampMs max_timestamp);
 
   std::filesystem::path log_path_;
   std::filesystem::path index_path_;

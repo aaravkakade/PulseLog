@@ -70,14 +70,14 @@ class LogRecord {
 
   ~LogRecord() { logging_detail::Emit(level_, component_, stream_.str()); }
 
-  template <typename T>
+  template<typename T>
   LogRecord& operator<<(const T& value) {
     stream_ << value;
     return *this;
   }
 
   // Appends ` key=value`.
-  template <typename T>
+  template<typename T>
   LogRecord& Field(std::string_view key, const T& value) {
     stream_ << ' ' << key << '=' << value;
     return *this;
@@ -91,7 +91,7 @@ class LogRecord {
 
 }  // namespace pulselog
 
-#define PL_LOG_ENABLED(level)                                                    \
+#define PL_LOG_ENABLED(level) \
   ((level) >= ::pulselog::logging_detail::g_min_level.load(std::memory_order_relaxed))
 
 #define PL_LOG(level, component) \

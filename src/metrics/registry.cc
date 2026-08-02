@@ -52,7 +52,9 @@ std::string EscapeJson(std::string_view value) {
   return out;
 }
 
-void AppendLabels(std::ostringstream& out, const Labels& labels, const char* extra_key = nullptr,
+void AppendLabels(std::ostringstream& out,
+                  const Labels& labels,
+                  const char* extra_key = nullptr,
                   const char* extra_value = nullptr) {
   if (labels.empty() && extra_key == nullptr) return;
   out << '{';
@@ -89,8 +91,8 @@ Counter& MetricRegistry::GetCounter(std::string name, std::string help, Labels l
   if (it != entries_.end() && it->second.counter != nullptr) return *it->second.counter;
 
   Entry entry;
-  entry.descriptor = MetricDescriptor{std::move(name), std::move(help), MetricType::kCounter,
-                                      std::move(labels)};
+  entry.descriptor =
+      MetricDescriptor{std::move(name), std::move(help), MetricType::kCounter, std::move(labels)};
   entry.counter = std::make_unique<Counter>();
   Counter& ref = *entry.counter;
   entries_.emplace(key, std::move(entry));
@@ -112,16 +114,19 @@ Gauge& MetricRegistry::GetGauge(std::string name, std::string help, Labels label
   return ref;
 }
 
-Histogram& MetricRegistry::GetHistogram(std::string name, std::string help, Labels labels,
-                                        std::int64_t max_trackable, int significant_digits) {
+Histogram& MetricRegistry::GetHistogram(std::string name,
+                                        std::string help,
+                                        Labels labels,
+                                        std::int64_t max_trackable,
+                                        int significant_digits) {
   const std::string key = MakeKey(name, labels);
   std::lock_guard<std::mutex> lock(mutex_);
   auto it = entries_.find(key);
   if (it != entries_.end() && it->second.histogram != nullptr) return *it->second.histogram;
 
   Entry entry;
-  entry.descriptor = MetricDescriptor{std::move(name), std::move(help), MetricType::kHistogram,
-                                      std::move(labels)};
+  entry.descriptor =
+      MetricDescriptor{std::move(name), std::move(help), MetricType::kHistogram, std::move(labels)};
   entry.histogram = std::make_unique<Histogram>(max_trackable, significant_digits);
   Histogram& ref = *entry.histogram;
   entries_.emplace(key, std::move(entry));
@@ -188,9 +193,12 @@ std::string MetricRegistry::RenderPrometheus() const {
         // The underlying HDR histogram computes exact quantiles over the whole
         // observation set rather than an approximation over a sliding window.
         const HistogramSnapshot snapshot = entry.histogram->GetSnapshot();
-        const std::pair<const char*, std::int64_t> quantiles[] = {
-            {"0.5", snapshot.p50},   {"0.9", snapshot.p90},   {"0.95", snapshot.p95},
-            {"0.99", snapshot.p99},  {"0.999", snapshot.p999}, {"1.0", snapshot.max}};
+        const std::pair<const char*, std::int64_t> quantiles[] = {{"0.5", snapshot.p50},
+                                                                  {"0.9", snapshot.p90},
+                                                                  {"0.95", snapshot.p95},
+                                                                  {"0.99", snapshot.p99},
+                                                                  {"0.999", snapshot.p999},
+                                                                  {"1.0", snapshot.max}};
         for (const auto& [quantile, value] : quantiles) {
           out << descriptor.name;
           AppendLabels(out, descriptor.labels, "quantile", quantile);
@@ -262,7 +270,8 @@ BrokerMetrics::BrokerMetrics(MetricRegistry& reg)
       messages_fetched(
           reg.GetCounter("pulselog_messages_fetched_total", "Records returned to consumers")),
       bytes_fetched(reg.GetCounter("pulselog_bytes_fetched_total", "Record bytes returned")),
-      produce_requests(reg.GetCounter("pulselog_produce_requests_total", "Produce requests served")),
+      produce_requests(
+          reg.GetCounter("pulselog_produce_requests_total", "Produce requests served")),
       fetch_requests(reg.GetCounter("pulselog_fetch_requests_total", "Fetch requests served")),
       failed_requests(
           reg.GetCounter("pulselog_failed_requests_total", "Requests answered with an error")),
@@ -276,21 +285,20 @@ BrokerMetrics::BrokerMetrics(MetricRegistry& reg)
           reg.GetHistogram("pulselog_flush_latency_nanos", "fsync duration in nanoseconds")),
       replication_latency(reg.GetHistogram("pulselog_replication_latency_nanos",
                                            "Leader-to-follower acknowledgement latency")),
-      queue_wait(reg.GetHistogram("pulselog_queue_wait_nanos",
-                                  "Time a request spent in a worker queue")),
-      produce_batch_size(reg.GetHistogram("pulselog_produce_batch_records",
-                                          "Records per produce request", {}, 1'000'000, 3)),
+      queue_wait(
+          reg.GetHistogram("pulselog_queue_wait_nanos", "Time a request spent in a worker queue")),
+      produce_batch_size(reg.GetHistogram(
+          "pulselog_produce_batch_records", "Records per produce request", {}, 1'000'000, 3)),
       active_connections(
           reg.GetGauge("pulselog_active_connections", "Currently open client connections")),
       hosted_partitions(
           reg.GetGauge("pulselog_hosted_partitions", "Partitions hosted by this broker")),
-      leader_partitions(
-          reg.GetGauge("pulselog_leader_partitions", "Partitions this broker leads")),
+      leader_partitions(reg.GetGauge("pulselog_leader_partitions", "Partitions this broker leads")),
       request_queue_depth(
           reg.GetGauge("pulselog_request_queue_depth", "Summed depth of all worker queues")),
       total_log_bytes(reg.GetGauge("pulselog_log_bytes", "Bytes stored across all partitions")),
-      replication_lag_max(reg.GetGauge("pulselog_replication_lag_max_records",
-                                       "Largest follower lag in records")),
+      replication_lag_max(
+          reg.GetGauge("pulselog_replication_lag_max_records", "Largest follower lag in records")),
       consumer_group_count(
           reg.GetGauge("pulselog_consumer_groups", "Consumer groups this broker coordinates")),
       resident_memory_bytes(

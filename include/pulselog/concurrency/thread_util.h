@@ -33,7 +33,7 @@ class NamedThread {
  public:
   NamedThread() = default;
 
-  template <typename Fn>
+  template<typename Fn>
   NamedThread(std::string name, Fn&& fn) : name_(std::move(name)) {
     thread_ = std::thread([n = name_, f = std::forward<Fn>(fn)]() mutable {
       SetCurrentThreadName(n);

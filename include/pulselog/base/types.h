@@ -14,7 +14,7 @@ namespace pulselog {
 // A phantom-tagged integer. Prevents the classic bug of passing a partition
 // index where a broker ID is expected, at zero runtime cost. Arithmetic is
 // deliberately not provided: these are identities, not quantities.
-template <typename Tag, typename Underlying = std::int32_t>
+template<typename Tag, typename Underlying = std::int32_t>
 class StrongId {
  public:
   using UnderlyingType = Underlying;
@@ -140,14 +140,14 @@ inline constexpr std::size_t kCacheLineSize = 64;
 
 namespace std {
 
-template <typename Tag, typename Underlying>
+template<typename Tag, typename Underlying>
 struct hash<::pulselog::StrongId<Tag, Underlying>> {
   std::size_t operator()(const ::pulselog::StrongId<Tag, Underlying>& id) const noexcept {
     return std::hash<Underlying>{}(id.value());
   }
 };
 
-template <>
+template<>
 struct hash<::pulselog::TopicPartition> {
   std::size_t operator()(const ::pulselog::TopicPartition& tp) const noexcept {
     const std::size_t h1 = std::hash<std::string>{}(tp.topic);

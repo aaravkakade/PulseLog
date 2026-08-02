@@ -15,13 +15,13 @@
 
 namespace pulselog {
 
-template <typename T>
+template<typename T>
 concept UnsignedIntegral = std::is_unsigned_v<T> && std::is_integral_v<T>;
 
 // std::byteswap is C++23 and is not available in the libc++ shipped with
 // Apple clang 15, so the builtins are used directly. Both GCC and Clang lower
 // these to a single instruction.
-template <UnsignedIntegral T>
+template<UnsignedIntegral T>
 [[nodiscard]] constexpr T ByteSwap(T value) noexcept {
   if constexpr (sizeof(T) == 1) {
     return value;
@@ -38,7 +38,7 @@ template <UnsignedIntegral T>
 // Stores `value` at `dst` in little-endian order. `dst` must have room for
 // sizeof(T) bytes; bounds checking is the caller's responsibility (the codec
 // layer does it once per frame rather than once per field).
-template <UnsignedIntegral T>
+template<UnsignedIntegral T>
 inline void StoreLe(std::uint8_t* dst, T value) noexcept {
   if constexpr (std::endian::native == std::endian::big) {
     value = ByteSwap(value);
@@ -46,7 +46,7 @@ inline void StoreLe(std::uint8_t* dst, T value) noexcept {
   std::memcpy(dst, &value, sizeof(T));
 }
 
-template <UnsignedIntegral T>
+template<UnsignedIntegral T>
 [[nodiscard]] inline T LoadLe(const std::uint8_t* src) noexcept {
   T value{};
   std::memcpy(&value, src, sizeof(T));

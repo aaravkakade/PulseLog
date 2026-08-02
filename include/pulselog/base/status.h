@@ -39,10 +39,10 @@ enum class ErrorCode : std::uint16_t {
   kPermissionDenied = 15,
   kResourceExhausted = 16,  // Disk full, memory budget exceeded.
   kRebalanceInProgress = 17,
-  kUnknownMember = 18,   // Consumer-group member ID not recognised.
+  kUnknownMember = 18,  // Consumer-group member ID not recognised.
   kIllegalGeneration = 19,
-  kClosed = 20,          // Connection or component already closed.
-  kWouldBlock = 21,      // Non-blocking operation cannot proceed yet.
+  kClosed = 20,      // Connection or component already closed.
+  kWouldBlock = 21,  // Non-blocking operation cannot proceed yet.
   kInternal = 22,
 };
 
@@ -85,35 +85,49 @@ class Status {
 };
 
 // Convenience constructors keep call sites short.
-inline Status OkStatus() noexcept { return Status::Ok(); }
+inline Status OkStatus() noexcept {
+  return Status::Ok();
+}
 
 inline Status InvalidArgument(std::string msg) {
   return Status{ErrorCode::kInvalidArgument, std::move(msg)};
 }
 
-inline Status NotFound(std::string msg) { return Status{ErrorCode::kNotFound, std::move(msg)}; }
+inline Status NotFound(std::string msg) {
+  return Status{ErrorCode::kNotFound, std::move(msg)};
+}
 
 inline Status AlreadyExists(std::string msg) {
   return Status{ErrorCode::kAlreadyExists, std::move(msg)};
 }
 
-inline Status OutOfRange(std::string msg) { return Status{ErrorCode::kOutOfRange, std::move(msg)}; }
+inline Status OutOfRange(std::string msg) {
+  return Status{ErrorCode::kOutOfRange, std::move(msg)};
+}
 
-inline Status Corruption(std::string msg) { return Status{ErrorCode::kCorruption, std::move(msg)}; }
+inline Status Corruption(std::string msg) {
+  return Status{ErrorCode::kCorruption, std::move(msg)};
+}
 
-inline Status IoError(std::string msg) { return Status{ErrorCode::kIoError, std::move(msg)}; }
+inline Status IoError(std::string msg) {
+  return Status{ErrorCode::kIoError, std::move(msg)};
+}
 
 inline Status Unavailable(std::string msg) {
   return Status{ErrorCode::kUnavailable, std::move(msg)};
 }
 
-inline Status TimedOut(std::string msg) { return Status{ErrorCode::kTimeout, std::move(msg)}; }
+inline Status TimedOut(std::string msg) {
+  return Status{ErrorCode::kTimeout, std::move(msg)};
+}
 
 inline Status ProtocolError(std::string msg) {
   return Status{ErrorCode::kProtocolError, std::move(msg)};
 }
 
-inline Status Internal(std::string msg) { return Status{ErrorCode::kInternal, std::move(msg)}; }
+inline Status Internal(std::string msg) {
+  return Status{ErrorCode::kInternal, std::move(msg)};
+}
 
 inline Status ResourceExhausted(std::string msg) {
   return Status{ErrorCode::kResourceExhausted, std::move(msg)};
@@ -124,7 +138,7 @@ inline Status ResourceExhausted(std::string msg) {
 
 // `Result<T>` holds either a value or a non-OK Status. It deliberately has no
 // implicit conversion to bool to force explicit `.ok()` checks at call sites.
-template <typename T>
+template<typename T>
 class [[nodiscard]] Result {
  public:
   using ValueType = T;

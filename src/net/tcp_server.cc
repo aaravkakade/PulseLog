@@ -71,9 +71,8 @@ Status TcpServer::Start() {
 
   accept_loop_ = std::make_unique<EventLoop>(-1);
   PL_RETURN_IF_ERROR(accept_loop_->Init());
-  PL_RETURN_IF_ERROR(
-      accept_loop_->AddHandler(std::make_unique<Acceptor>(std::move(listener), *this),
-                               EventMask::kRead));
+  PL_RETURN_IF_ERROR(accept_loop_->AddHandler(
+      std::make_unique<Acceptor>(std::move(listener), *this), EventMask::kRead));
 
   running_.store(true, std::memory_order_release);
 
@@ -165,13 +164,18 @@ void TcpServer::OnAccepted(TcpSocket socket) {
   auto* raw_socket = new TcpSocket(std::move(socket));
   const bool posted = loop.PostTask([this, raw_socket, id, &loop, &pool, &loop_count] {
     std::unique_ptr<TcpSocket> owned(raw_socket);
-    auto connection = std::make_unique<Connection>(
-        id, std::move(*owned), loop, pool, options_.connection, on_frame_,
-        [this, &loop_count](Connection& conn, const Status& reason) {
-          connection_count_.fetch_sub(1, std::memory_order_relaxed);
-          loop_count.fetch_sub(1, std::memory_order_relaxed);
-          if (on_close_) on_close_(conn, reason);
-        });
+    auto connection =
+        std::make_unique<Connection>(id,
+                                     std::move(*owned),
+                                     loop,
+                                     pool,
+                                     options_.connection,
+                                     on_frame_,
+                                     [this, &loop_count](Connection& conn, const Status& reason) {
+                                       connection_count_.fetch_sub(1, std::memory_order_relaxed);
+                                       loop_count.fetch_sub(1, std::memory_order_relaxed);
+                                       if (on_close_) on_close_(conn, reason);
+                                     });
 
     const Status status = loop.AddHandler(std::move(connection), EventMask::kRead);
     if (!status.ok()) {

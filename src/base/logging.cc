@@ -33,8 +33,7 @@ std::FILE*& OutputFile() {
 void FormatTimestamp(std::array<char, 32>& out) {
   const auto now = std::chrono::system_clock::now();
   const auto secs = std::chrono::time_point_cast<std::chrono::seconds>(now);
-  const auto millis =
-      std::chrono::duration_cast<std::chrono::milliseconds>(now - secs).count();
+  const auto millis = std::chrono::duration_cast<std::chrono::milliseconds>(now - secs).count();
   const std::time_t tt = std::chrono::system_clock::to_time_t(secs);
   std::tm tm_buf{};
   ::gmtime_r(&tt, &tm_buf);
@@ -54,15 +53,26 @@ void Emit(LogLevel level, std::string_view component, std::string_view message) 
   std::lock_guard<std::mutex> lock(OutputMutex());
   std::FILE* out = OutputFile();
   if (broker >= 0) {
-    std::fprintf(out, "%s %-5.*s broker=%d [%.*s] %.*s\n", timestamp.data(),
-                 static_cast<int>(level_name.size()), level_name.data(), broker,
-                 static_cast<int>(component.size()), component.data(),
-                 static_cast<int>(message.size()), message.data());
+    std::fprintf(out,
+                 "%s %-5.*s broker=%d [%.*s] %.*s\n",
+                 timestamp.data(),
+                 static_cast<int>(level_name.size()),
+                 level_name.data(),
+                 broker,
+                 static_cast<int>(component.size()),
+                 component.data(),
+                 static_cast<int>(message.size()),
+                 message.data());
   } else {
-    std::fprintf(out, "%s %-5.*s [%.*s] %.*s\n", timestamp.data(),
-                 static_cast<int>(level_name.size()), level_name.data(),
-                 static_cast<int>(component.size()), component.data(),
-                 static_cast<int>(message.size()), message.data());
+    std::fprintf(out,
+                 "%s %-5.*s [%.*s] %.*s\n",
+                 timestamp.data(),
+                 static_cast<int>(level_name.size()),
+                 level_name.data(),
+                 static_cast<int>(component.size()),
+                 component.data(),
+                 static_cast<int>(message.size()),
+                 message.data());
   }
   // Errors are flushed immediately so a crash does not swallow the reason.
   if (level >= LogLevel::kError) std::fflush(out);

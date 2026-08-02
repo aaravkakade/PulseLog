@@ -30,7 +30,8 @@ struct SyncClientOptions {
 
 class SyncClient {
  public:
-  explicit SyncClient(SyncClientOptions options = {}) : options_(options), decoder_(options.max_frame_bytes) {}
+  explicit SyncClient(SyncClientOptions options = {})
+      : options_(options), decoder_(options.max_frame_bytes) {}
 
   SyncClient(const SyncClient&) = delete;
   SyncClient& operator=(const SyncClient&) = delete;
@@ -48,8 +49,7 @@ class SyncClient {
 
   // Sends one request frame. Blocks until it is fully written or the deadline
   // passes.
-  [[nodiscard]] Status SendRequest(protocol::OpCode opcode, RequestId request_id,
-                                   ByteSpan payload);
+  [[nodiscard]] Status SendRequest(protocol::OpCode opcode, RequestId request_id, ByteSpan payload);
 
   // Reads frames until one with `expected_request_id` arrives, discarding
   // earlier responses (which can only be stale ones from an abandoned
@@ -58,7 +58,8 @@ class SyncClient {
 
   // Request/response in one call.
   [[nodiscard]] Result<protocol::FrameDecoder::Frame> Call(protocol::OpCode opcode,
-                                                           RequestId request_id, ByteSpan payload);
+                                                           RequestId request_id,
+                                                           ByteSpan payload);
 
   [[nodiscard]] const Endpoint& endpoint() const noexcept { return endpoint_; }
 

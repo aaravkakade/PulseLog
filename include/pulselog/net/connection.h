@@ -64,8 +64,13 @@ class Connection final : public EventHandler {
  public:
   using Id = std::uint64_t;
 
-  Connection(Id id, TcpSocket socket, EventLoop& loop, BufferPool& pool,
-             ConnectionOptions options, FrameCallback on_frame, CloseCallback on_close);
+  Connection(Id id,
+             TcpSocket socket,
+             EventLoop& loop,
+             BufferPool& pool,
+             ConnectionOptions options,
+             FrameCallback on_frame,
+             CloseCallback on_close);
 
   ~Connection() override;
 
@@ -80,7 +85,9 @@ class Connection final : public EventHandler {
 
   // Queues an encoded frame. Returns false when the hard ceiling is hit, in
   // which case the connection is scheduled for closure.
-  [[nodiscard]] bool SendFrame(protocol::OpCode opcode, RequestId request_id, std::uint16_t flags,
+  [[nodiscard]] bool SendFrame(protocol::OpCode opcode,
+                               RequestId request_id,
+                               std::uint16_t flags,
                                ByteSpan payload);
 
   // Queues raw pre-framed bytes. Used by paths that build the frame elsewhere.
@@ -160,7 +167,6 @@ class Connection final : public EventHandler {
   std::int64_t last_activity_ms_ = 0;
   Stats stats_;
   std::shared_ptr<void> user_data_;
-
 };
 
 }  // namespace pulselog::net

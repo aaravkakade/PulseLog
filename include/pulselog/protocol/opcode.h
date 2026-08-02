@@ -19,9 +19,9 @@ enum class OpCode : std::uint16_t {
   kUnknown = 0,
 
   // Data plane.
-  kProduce = 1,        // Append a batch of records to one partition.
-  kFetch = 2,          // Read records from one partition starting at an offset.
-  kListOffsets = 3,    // Resolve earliest/latest/timestamp to a concrete offset.
+  kProduce = 1,      // Append a batch of records to one partition.
+  kFetch = 2,        // Read records from one partition starting at an offset.
+  kListOffsets = 3,  // Resolve earliest/latest/timestamp to a concrete offset.
 
   // Control plane.
   kCreateTopic = 20,
@@ -31,7 +31,7 @@ enum class OpCode : std::uint16_t {
   kJoinGroup = 24,     // Enter a group; returns generation + assignment.
   kHeartbeat = 25,     // Keep a group session alive.
   kLeaveGroup = 26,
-  kHealth = 27,        // Liveness + basic broker state.
+  kHealth = 27,  // Liveness + basic broker state.
   kListTopics = 28,
 
   // Inter-broker replication.

@@ -67,7 +67,8 @@ std::string FormatBytes(std::int64_t bytes) {
   return out.str();
 }
 
-int CmdCreateTopic(client::ClientContext& context, const ConfigStore& flags,
+int CmdCreateTopic(client::ClientContext& context,
+                   const ConfigStore& flags,
                    const std::vector<std::string>& args) {
   if (args.size() < 2) {
     std::cerr << "usage: pulselog-cli create-topic <topic> [--partitions=N]\n";
@@ -79,9 +80,9 @@ int CmdCreateTopic(client::ClientContext& context, const ConfigStore& flags,
   if (!replication.ok()) return Fail(replication.status());
 
   client::AdminClient admin(context);
-  const Status status =
-      admin.CreateTopic(args[1], static_cast<std::int32_t>(partitions.value()),
-                        static_cast<std::int16_t>(replication.value()));
+  const Status status = admin.CreateTopic(args[1],
+                                          static_cast<std::int32_t>(partitions.value()),
+                                          static_cast<std::int16_t>(replication.value()));
   if (!status.ok()) return Fail(status);
 
   std::cout << "created topic " << args[1] << " with " << partitions.value()
@@ -135,8 +136,7 @@ int CmdMetadata(client::ClientContext& context, const std::vector<std::string>& 
     std::cout << "topic " << topic.name << ":\n";
     for (const auto& partition : topic.partitions) {
       std::cout << "  partition " << partition.index.value() << " leader "
-                << partition.leader.value() << " epoch " << partition.leader_epoch
-                << " replicas [";
+                << partition.leader.value() << " epoch " << partition.leader_epoch << " replicas [";
       for (std::size_t i = 0; i < partition.replicas.size(); ++i) {
         if (i > 0) std::cout << ',';
         std::cout << partition.replicas[i].value();
@@ -180,7 +180,8 @@ int CmdDescribeCluster(client::ClientContext& context) {
   return 0;
 }
 
-int CmdProduce(client::ClientContext& context, const ConfigStore& flags,
+int CmdProduce(client::ClientContext& context,
+               const ConfigStore& flags,
                const std::vector<std::string>& args) {
   if (args.size() < 2) {
     std::cerr << "usage: pulselog-cli produce <topic> [--value=V] [--count=N]\n";
@@ -202,7 +203,8 @@ int CmdProduce(client::ClientContext& context, const ConfigStore& flags,
 
   client::ProducerConfig producer_config;
   producer_config.acks = acks;
-  producer_config.batch_records = static_cast<std::size_t>(std::max<std::int64_t>(1, batch.value()));
+  producer_config.batch_records =
+      static_cast<std::size_t>(std::max<std::int64_t>(1, batch.value()));
   producer_config.forced_partition = static_cast<std::int32_t>(partition.value());
   client::Producer producer(context, producer_config);
 
@@ -212,8 +214,7 @@ int CmdProduce(client::ClientContext& context, const ConfigStore& flags,
 
   Offset last_offset = kInvalidOffset;
   for (std::int64_t i = 0; i < count.value(); ++i) {
-    const std::string indexed_value =
-        count.value() > 1 ? value + " #" + std::to_string(i) : value;
+    const std::string indexed_value = count.value() > 1 ? value + " #" + std::to_string(i) : value;
     client::OutboundRecord record;
     record.key = key;
     record.key_is_null = key_is_null;
@@ -233,7 +234,8 @@ int CmdProduce(client::ClientContext& context, const ConfigStore& flags,
   return 0;
 }
 
-int CmdConsume(client::ClientContext& context, const ConfigStore& flags,
+int CmdConsume(client::ClientContext& context,
+               const ConfigStore& flags,
                const std::vector<std::string>& args) {
   if (args.size() < 2) {
     std::cerr << "usage: pulselog-cli consume <topic> [--partition=N] [--offset=N]\n";
@@ -284,7 +286,8 @@ int CmdConsume(client::ClientContext& context, const ConfigStore& flags,
   return 0;
 }
 
-int CmdConsumeGroup(client::ClientContext& context, const ConfigStore& flags,
+int CmdConsumeGroup(client::ClientContext& context,
+                    const ConfigStore& flags,
                     const std::vector<std::string>& args) {
   if (args.size() < 2) {
     std::cerr << "usage: pulselog-cli consume-group <topic> --group=G\n";
@@ -342,7 +345,8 @@ int CmdConsumeGroup(client::ClientContext& context, const ConfigStore& flags,
   return 0;
 }
 
-int CmdOffsets(client::ClientContext& context, const ConfigStore& flags,
+int CmdOffsets(client::ClientContext& context,
+               const ConfigStore& flags,
                const std::vector<std::string>& args) {
   if (args.size() < 2) {
     std::cerr << "usage: pulselog-cli offsets <topic> [--partition=N]\n";

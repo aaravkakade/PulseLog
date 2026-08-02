@@ -15,7 +15,9 @@ constexpr std::string_view kComponent = "broker.partitions";
 PartitionManager::PartitionManager(const BrokerConfig& config, metadata::ClusterMetadata& cluster)
     : config_(config), cluster_(cluster) {}
 
-PartitionManager::~PartitionManager() { Close(); }
+PartitionManager::~PartitionManager() {
+  Close();
+}
 
 std::size_t PartitionManager::WorkerFor(const TopicPartition& topic_partition) const {
   if (config_.worker_threads <= 1) return 0;
@@ -24,7 +26,8 @@ std::size_t PartitionManager::WorkerFor(const TopicPartition& topic_partition) c
 }
 
 Result<PartitionReplica*> PartitionManager::OpenPartition(
-    const TopicPartition& topic_partition, const metadata::TopicConfig& topic_config,
+    const TopicPartition& topic_partition,
+    const metadata::TopicConfig& topic_config,
     const metadata::PartitionAssignment& assignment) {
   {
     std::shared_lock<std::shared_mutex> lock(mutex_);
@@ -32,16 +35,16 @@ Result<PartitionReplica*> PartitionManager::OpenPartition(
     if (it != partitions_.end()) return it->second.get();
   }
 
-  storage::LogOptions options = config_.LogOptionsFor(
-      topic_partition.topic, topic_partition.partition, topic_config.retention_ms,
-      topic_config.segment_bytes);
+  storage::LogOptions options = config_.LogOptionsFor(topic_partition.topic,
+                                                      topic_partition.partition,
+                                                      topic_config.retention_ms,
+                                                      topic_config.segment_bytes);
 
   storage::RecoveryReport recovery;
-  PL_ASSIGN_OR_RETURN(auto log,
-                      storage::PartitionLog::Open(topic_partition, options, &recovery));
+  PL_ASSIGN_OR_RETURN(auto log, storage::PartitionLog::Open(topic_partition, options, &recovery));
 
-  auto replica = std::make_unique<PartitionReplica>(topic_partition, assignment,
-                                                    config_.broker_id, std::move(log));
+  auto replica = std::make_unique<PartitionReplica>(
+      topic_partition, assignment, config_.broker_id, std::move(log));
   PartitionReplica* raw = replica.get();
 
   std::unique_lock<std::shared_mutex> lock(mutex_);
@@ -62,9 +65,10 @@ Result<PartitionManager::OpenReport> PartitionManager::OpenHostedPartitions() {
     auto assignment = cluster_.GetPartition(topic_partition.topic, topic_partition.partition);
     if (!assignment.ok()) continue;
 
-    storage::LogOptions options = config_.LogOptionsFor(
-        topic_partition.topic, topic_partition.partition, topic->config.retention_ms,
-        topic->config.segment_bytes);
+    storage::LogOptions options = config_.LogOptionsFor(topic_partition.topic,
+                                                        topic_partition.partition,
+                                                        topic->config.retention_ms,
+                                                        topic->config.segment_bytes);
 
     storage::RecoveryReport recovery;
     auto log = storage::PartitionLog::Open(topic_partition, options, &recovery);
@@ -76,8 +80,8 @@ Result<PartitionManager::OpenReport> PartitionManager::OpenHostedPartitions() {
     report.bytes_recovered += recovery.valid_bytes;
     if (recovery.truncated) ++report.partitions_truncated;
 
-    auto replica = std::make_unique<PartitionReplica>(topic_partition, assignment.value(),
-                                                      config_.broker_id, std::move(log).value());
+    auto replica = std::make_unique<PartitionReplica>(
+        topic_partition, assignment.value(), config_.broker_id, std::move(log).value());
     std::unique_lock<std::shared_mutex> lock(mutex_);
     partitions_.emplace(topic_partition, std::move(replica));
     ++report.partitions_opened;
@@ -93,8 +97,8 @@ Result<PartitionManager::OpenReport> PartitionManager::OpenHostedPartitions() {
   return report;
 }
 
-Result<metadata::TopicDescriptor> PartitionManager::CreateTopic(
-    const metadata::TopicConfig& config, bool* created) {
+Result<metadata::TopicDescriptor> PartitionManager::CreateTopic(const metadata::TopicConfig& config,
+                                                                bool* created) {
   PL_ASSIGN_OR_RETURN(const metadata::TopicDescriptor descriptor,
                       cluster_.CreateTopic(config, created));
   PL_RETURN_IF_ERROR(OpenPartitionsForTopic(descriptor));
@@ -140,9 +144,8 @@ Status PartitionManager::DeleteTopic(const std::string& topic, bool delete_data)
 
   if (delete_data) {
     for (const auto& assignment : descriptor.partitions) {
-      const std::filesystem::path dir =
-          std::filesystem::path(config_.data_dir) /
-          (topic + "-" + std::to_string(assignment.index.value()));
+      const std::filesystem::path dir = std::filesystem::path(config_.data_dir) /
+                                        (topic + "-" + std::to_string(assignment.index.value()));
       std::error_code ec;
       std::filesystem::remove_all(dir, ec);
       if (ec) {
@@ -240,8 +243,7 @@ PartitionManager::AggregateStats PartitionManager::GetStats() const {
     aggregate.total_records +=
         static_cast<std::uint64_t>(stats.log_end_offset - stats.log_start_offset);
     aggregate.pending_waiters += stats.pending_waiters;
-    aggregate.max_replication_lag =
-        std::max(aggregate.max_replication_lag, stats.max_follower_lag);
+    aggregate.max_replication_lag = std::max(aggregate.max_replication_lag, stats.max_follower_lag);
 
     const auto log_stats = replica->log().GetStats();
     aggregate.flush_count += log_stats.flush_count;

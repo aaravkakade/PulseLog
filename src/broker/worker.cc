@@ -22,11 +22,15 @@ constexpr auto kSleepSlice = std::chrono::microseconds(200);
 
 }  // namespace
 
-PartitionWorker::PartitionWorker(std::size_t index, std::size_t queue_capacity,
-                                 RequestExecutor& executor, int pin_cpu)
+PartitionWorker::PartitionWorker(std::size_t index,
+                                 std::size_t queue_capacity,
+                                 RequestExecutor& executor,
+                                 int pin_cpu)
     : index_(index), executor_(executor), pin_cpu_(pin_cpu), queue_(queue_capacity) {}
 
-PartitionWorker::~PartitionWorker() { Stop(); }
+PartitionWorker::~PartitionWorker() {
+  Stop();
+}
 
 void PartitionWorker::Start() {
   if (running_.exchange(true, std::memory_order_acq_rel)) return;

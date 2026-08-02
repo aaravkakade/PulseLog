@@ -94,8 +94,8 @@ void EncodeFrame(ByteBuffer& out, const FrameHeader& header, ByteSpan payload);
 
 // Convenience for the common case: build a frame from an already-encoded
 // payload living in a scratch buffer.
-void EncodeFrame(ByteBuffer& out, OpCode opcode, RequestId request_id, std::uint16_t flags,
-                 ByteSpan payload);
+void EncodeFrame(
+    ByteBuffer& out, OpCode opcode, RequestId request_id, std::uint16_t flags, ByteSpan payload);
 
 // Incremental frame reader for stream sockets.
 //

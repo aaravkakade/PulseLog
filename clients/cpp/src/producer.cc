@@ -40,8 +40,7 @@ Producer::~Producer() {
   }
 }
 
-Result<PartitionIndex> Producer::RouteFor(const std::string& topic,
-                                          const OutboundRecord& record) {
+Result<PartitionIndex> Producer::RouteFor(const std::string& topic, const OutboundRecord& record) {
   if (config_.forced_partition >= 0) return PartitionIndex{config_.forced_partition};
 
   auto partition_count = context_.PartitionCount(topic);
@@ -65,8 +64,7 @@ Result<PartitionIndex> Producer::RouteFor(const std::string& topic,
     // Measured on this machine, per-record round-robin over 4 partitions
     // collapsed a batch-100 workload to effectively batch-1.
     if (pending_count_ == 0) {
-      sticky_partition_ =
-          metadata::PartitionRoundRobin(round_robin_++, partition_count.value());
+      sticky_partition_ = metadata::PartitionRoundRobin(round_robin_++, partition_count.value());
     }
     if (sticky_partition_.value() >= partition_count.value()) {
       sticky_partition_ = PartitionIndex{0};
@@ -78,8 +76,10 @@ Result<PartitionIndex> Producer::RouteFor(const std::string& topic,
   return metadata::PartitionForKey(AsBytes(record.key), partition_count.value());
 }
 
-Result<DeliveryResult> Producer::SendEncoded(const std::string& topic, PartitionIndex partition,
-                                             ByteSpan records, std::uint32_t record_count) {
+Result<DeliveryResult> Producer::SendEncoded(const std::string& topic,
+                                             PartitionIndex partition,
+                                             ByteSpan records,
+                                             std::uint32_t record_count) {
   protocol::ProduceRequest request;
   request.topic = topic;
   request.partition = partition;
@@ -99,9 +99,9 @@ Result<DeliveryResult> Producer::SendEncoded(const std::string& topic, Partition
   for (int attempt = 0; attempt < retry.max_attempts; ++attempt) {
     if (attempt > 0) {
       std::this_thread::sleep_for(std::chrono::milliseconds(backoff_ms));
-      backoff_ms = std::min(static_cast<std::int64_t>(
-                                static_cast<double>(backoff_ms) * retry.backoff_multiplier),
-                            retry.max_backoff_ms);
+      backoff_ms = std::min(
+          static_cast<std::int64_t>(static_cast<double>(backoff_ms) * retry.backoff_multiplier),
+          retry.max_backoff_ms);
       ++stats_.retries;
     }
 
@@ -113,8 +113,8 @@ Result<DeliveryResult> Producer::SendEncoded(const std::string& topic, Partition
     }
 
     const std::int64_t started = MonotonicNanos();
-    auto frame = connection.value()->Call(protocol::OpCode::kProduce, context_.NextRequestId(),
-                                          scratch_.Readable());
+    auto frame = connection.value()->Call(
+        protocol::OpCode::kProduce, context_.NextRequestId(), scratch_.Readable());
     if (!frame.ok()) {
       last_error = frame.status();
       // A dead connection invalidates our idea of where the leader is.
@@ -152,8 +152,7 @@ Result<DeliveryResult> Producer::SendEncoded(const std::string& topic, Partition
   }
 
   ++stats_.failures;
-  return last_error.WithContext("producing to " + topic + "-" +
-                                std::to_string(partition.value()));
+  return last_error.WithContext("producing to " + topic + "-" + std::to_string(partition.value()));
 }
 
 Result<DeliveryResult> Producer::Send(const std::string& topic, const OutboundRecord& record) {
@@ -161,8 +160,8 @@ Result<DeliveryResult> Producer::Send(const std::string& topic, const OutboundRe
 
   // Batching only ever combines records for the same topic and partition; a
   // batch is a single append to a single log.
-  const bool different_target = pending_count_ > 0 &&
-                                (pending_topic_ != topic || pending_partition_ != partition);
+  const bool different_target =
+      pending_count_ > 0 && (pending_topic_ != topic || pending_partition_ != partition);
   DeliveryResult implicit_flush;
   if (different_target) {
     PL_ASSIGN_OR_RETURN(implicit_flush, Flush());
@@ -175,8 +174,13 @@ Result<DeliveryResult> Producer::Send(const std::string& topic, const OutboundRe
     first_buffered_nanos_ = MonotonicNanos();
   }
 
-  protocol::AppendRecord(pending_, /*offset=*/0, record.timestamp, /*attributes=*/0,
-                         record.key_is_null, AsBytes(record.key), AsBytes(record.value));
+  protocol::AppendRecord(pending_,
+                         /*offset=*/0,
+                         record.timestamp,
+                         /*attributes=*/0,
+                         record.key_is_null,
+                         AsBytes(record.key),
+                         AsBytes(record.value));
   ++pending_count_;
 
   const bool by_count = pending_count_ >= config_.batch_records;
@@ -199,7 +203,8 @@ Result<DeliveryResult> Producer::Send(const std::string& topic, const OutboundRe
   return buffered;
 }
 
-Result<DeliveryResult> Producer::SendBatch(const std::string& topic, PartitionIndex partition,
+Result<DeliveryResult> Producer::SendBatch(const std::string& topic,
+                                           PartitionIndex partition,
                                            const std::vector<OutboundRecord>& records) {
   if (records.empty()) return InvalidArgument("cannot send an empty batch");
   if (pending_count_ > 0) {
@@ -209,11 +214,16 @@ Result<DeliveryResult> Producer::SendBatch(const std::string& topic, PartitionIn
 
   pending_.Clear();
   for (const auto& record : records) {
-    protocol::AppendRecord(pending_, 0, record.timestamp, 0, record.key_is_null,
-                           AsBytes(record.key), AsBytes(record.value));
+    protocol::AppendRecord(pending_,
+                           0,
+                           record.timestamp,
+                           0,
+                           record.key_is_null,
+                           AsBytes(record.key),
+                           AsBytes(record.value));
   }
-  return SendEncoded(topic, partition, pending_.Readable(),
-                     static_cast<std::uint32_t>(records.size()));
+  return SendEncoded(
+      topic, partition, pending_.Readable(), static_cast<std::uint32_t>(records.size()));
 }
 
 Result<DeliveryResult> Producer::Flush() {

@@ -30,7 +30,7 @@ struct TopicConfig {
   std::string name;
   std::int32_t partition_count = 1;
   std::int16_t replication_factor = 1;
-  std::int64_t retention_ms = -1;    // -1 inherits the broker default.
+  std::int64_t retention_ms = -1;  // -1 inherits the broker default.
   std::int64_t segment_bytes = -1;
   Compression compression = Compression::kNone;
 };
@@ -118,13 +118,15 @@ class ClusterMetadata {
 
   // Replaces the in-sync replica set for one partition. Called by the leader
   // as followers catch up or fall behind.
-  [[nodiscard]] Status UpdateInSyncReplicas(const std::string& topic, PartitionIndex partition,
+  [[nodiscard]] Status UpdateInSyncReplicas(const std::string& topic,
+                                            PartitionIndex partition,
                                             std::vector<BrokerId> in_sync);
 
   // Bumps a partition's leader epoch and sets a new leader. Used only by the
   // admin path today; the hook exists so an election implementation has one
   // place to change.
-  [[nodiscard]] Status SetLeader(const std::string& topic, PartitionIndex partition,
+  [[nodiscard]] Status SetLeader(const std::string& topic,
+                                 PartitionIndex partition,
                                  BrokerId leader);
 
   // --- persistence ----------------------------------------------------------

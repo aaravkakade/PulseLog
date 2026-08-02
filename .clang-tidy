@@ -25,15 +25,36 @@ Checks: >
   readability-string-compare,
   -bugprone-easily-swappable-parameters,
   -bugprone-narrowing-conversions,
+  # Specialising std::hash for our own types is the standard way to make them
+  # usable as unordered_map keys, and is explicitly permitted.
+  -bugprone-std-namespace-modification,
+  -cert-dcl58-cpp,
+  # Fires on the temporary *variable name* inside PL_ASSIGN_OR_RETURN, which
+  # cannot be parenthesised. The macro's actual arguments are parenthesised.
+  -bugprone-macro-parentheses,
   -cert-err58-cpp,
   -misc-include-cleaner,
   -misc-non-private-member-variables-in-classes,
   -misc-no-recursion,
+  # Misfires on out-of-line member function definitions, claiming a class
+  # method could have internal linkage.
+  -misc-use-internal-linkage,
+  # Too noisy to be actionable: it wants `const` on nearly every local.
+  -misc-const-correctness,
+  # Wants uint8_t bases for enums whose values are already sized deliberately
+  # (ErrorCode is uint16_t because it is a wire field).
+  -performance-enum-size,
   -modernize-use-trailing-return-type,
   -modernize-avoid-c-arrays,
   -performance-avoid-endl,
   -readability-redundant-access-specifiers
 
+# CI runs this with --warnings-as-errors. Note that clang-tidy must match the
+# compiler's standard library: running Homebrew clang-tidy against Apple's
+# libc++ produces a flood of 'file not found' errors and, worse, false
+# positives from the half-parsed translation unit (it reported four infinite
+# loops that plainly update their condition variable). Use the clang-tidy that
+# ships with your compiler.
 WarningsAsErrors: ''
 HeaderFilterRegex: '.*/(include/pulselog|src|clients/cpp)/.*'
 FormatStyle: file

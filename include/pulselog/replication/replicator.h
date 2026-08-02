@@ -71,7 +71,8 @@ struct ReplicationStats {
 
 class Replicator {
  public:
-  Replicator(ReplicatorOptions options, broker::PartitionManager& partitions,
+  Replicator(ReplicatorOptions options,
+             broker::PartitionManager& partitions,
              metadata::ClusterMetadata& cluster);
 
   Replicator(const Replicator&) = delete;

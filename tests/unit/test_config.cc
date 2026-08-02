@@ -1,9 +1,9 @@
-#include <gtest/gtest.h>
-
 #include <string>
 
-#include "pulselog/base/config.h"
 #include "test_support/temp_dir.h"
+#include <gtest/gtest.h>
+
+#include "pulselog/base/config.h"
 
 namespace pulselog {
 namespace {
@@ -54,8 +54,8 @@ TEST(Config, CommandLineOverridesFile) {
   ConfigStore config;
   ASSERT_TRUE(config.LoadFile(file.path()).ok());
 
-  const char* argv[] = {"pulselog-broker", "--broker.id=9", "--net.port=9092", "--verbose",
-                        "start"};
+  const char* argv[] = {
+      "pulselog-broker", "--broker.id=9", "--net.port=9092", "--verbose", "start"};
   const auto positional = config.LoadCommandLine(5, argv);
 
   ASSERT_EQ(positional.size(), 1U);

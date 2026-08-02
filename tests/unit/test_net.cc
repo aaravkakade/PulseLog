@@ -4,13 +4,13 @@
 // These use real sockets on loopback with ephemeral ports rather than mocks.
 // The behaviour under test -- partial reads, partial writes, EOF timing,
 // poller edge cases -- is exactly what a mock would paper over.
-#include <gtest/gtest.h>
-
 #include <atomic>
 #include <chrono>
 #include <string>
 #include <thread>
 #include <vector>
+
+#include <gtest/gtest.h>
 
 #include "pulselog/net/connection.h"
 #include "pulselog/net/event_loop.h"
@@ -27,7 +27,7 @@ using namespace std::chrono_literals;
 
 // Spins until `predicate` holds or the deadline passes. Returns whether it
 // became true -- lets tests assert on outcome rather than on sleep duration.
-template <typename Predicate>
+template<typename Predicate>
 bool WaitFor(Predicate predicate, std::chrono::milliseconds timeout = 5s) {
   const auto deadline = std::chrono::steady_clock::now() + timeout;
   while (std::chrono::steady_clock::now() < deadline) {
@@ -318,7 +318,8 @@ class EchoServer {
         [this](Connection& conn, const protocol::FrameDecoder::Frame& frame) {
           frames_.fetch_add(1, std::memory_order_relaxed);
           last_opcode_.store(static_cast<int>(frame.header.opcode), std::memory_order_relaxed);
-          (void)conn.SendFrame(frame.header.opcode, frame.header.request_id,
+          (void)conn.SendFrame(frame.header.opcode,
+                               frame.header.request_id,
                                static_cast<std::uint16_t>(protocol::FrameFlags::kResponse),
                                frame.payload);
         },
@@ -381,8 +382,8 @@ TEST(TcpServer, HandlesManyConcurrentConnections) {
       if (!client.Connect(server.endpoint()).ok()) return;
       for (int i = 0; i < kRequestsPerClient; ++i) {
         const std::string payload = std::to_string(c) + ":" + std::to_string(i);
-        auto response = client.Call(protocol::OpCode::kHealth,
-                                    static_cast<RequestId>(i + 1), AsBytes(payload));
+        auto response =
+            client.Call(protocol::OpCode::kHealth, static_cast<RequestId>(i + 1), AsBytes(payload));
         if (response.ok() && AsStringView(response->payload) == payload) {
           succeeded.fetch_add(1, std::memory_order_relaxed);
         }
@@ -430,8 +431,8 @@ TEST(TcpServer, HandlesPipelinedFramesInOneWrite) {
 
   ByteBuffer batch;
   for (int i = 0; i < 50; ++i) {
-    protocol::EncodeFrame(batch, protocol::OpCode::kHealth, static_cast<RequestId>(i), 0,
-                          AsBytes("pipelined"));
+    protocol::EncodeFrame(
+        batch, protocol::OpCode::kHealth, static_cast<RequestId>(i), 0, AsBytes("pipelined"));
   }
   ByteSpan remaining = batch.Readable();
   while (!remaining.empty()) {

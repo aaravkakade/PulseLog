@@ -74,13 +74,19 @@ struct RecordView {
 };
 
 // Exact encoded size of a record with the given key/value sizes.
-[[nodiscard]] std::size_t EncodedRecordSize(bool key_is_null, std::size_t key_len,
+[[nodiscard]] std::size_t EncodedRecordSize(bool key_is_null,
+                                            std::size_t key_len,
                                             std::size_t value_len) noexcept;
 
 // Appends one fully-formed record (including CRC) to `out`.
 // Returns the number of bytes written.
-std::size_t AppendRecord(ByteBuffer& out, Offset offset, TimestampMs timestamp,
-                         std::uint8_t attributes, bool key_is_null, ByteSpan key, ByteSpan value);
+std::size_t AppendRecord(ByteBuffer& out,
+                         Offset offset,
+                         TimestampMs timestamp,
+                         std::uint8_t attributes,
+                         bool key_is_null,
+                         ByteSpan key,
+                         ByteSpan value);
 
 // Overwrites the offset field of a record already encoded at `record_start`
 // and repairs the CRC. Used by the leader when it assigns offsets to a batch
@@ -90,7 +96,9 @@ void RewriteRecordOffset(std::uint8_t* record_start, std::size_t record_size, Of
 
 // Same, but also replaces the timestamp. Used when a producer leaves the
 // timestamp unset and the broker stamps log-append time.
-void RewriteRecordHeader(std::uint8_t* record_start, std::size_t record_size, Offset offset,
+void RewriteRecordHeader(std::uint8_t* record_start,
+                         std::size_t record_size,
+                         Offset offset,
                          TimestampMs timestamp);
 
 // Reads a record's timestamp without validating anything else. The caller must
@@ -106,8 +114,8 @@ void RewriteRecordHeader(std::uint8_t* record_start, std::size_t record_size, Of
 // docs/STORAGE_ENGINE.md.
 //
 // On success, `next_pos` receives the offset of the byte after this record.
-[[nodiscard]] Status ParseRecord(ByteSpan data, std::size_t pos, bool verify_crc, RecordView& out,
-                                 std::size_t& next_pos);
+[[nodiscard]] Status ParseRecord(
+    ByteSpan data, std::size_t pos, bool verify_crc, RecordView& out, std::size_t& next_pos);
 
 // Reads the `length` prefix without validating anything else. Returns nullopt
 // when fewer than 4 bytes remain. Used by the recovery scanner to decide

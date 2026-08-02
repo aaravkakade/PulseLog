@@ -121,9 +121,13 @@ bool LeaveGroupRequest::Decode(PayloadReader& r) {
   return r.GetString(member_id);
 }
 
-void LeaveGroupResponse::Encode(PayloadWriter& w) const { header.Encode(w); }
+void LeaveGroupResponse::Encode(PayloadWriter& w) const {
+  header.Encode(w);
+}
 
-bool LeaveGroupResponse::Decode(PayloadReader& r) { return header.Decode(r); }
+bool LeaveGroupResponse::Decode(PayloadReader& r) {
+  return header.Decode(r);
+}
 
 // --- Offset commit / fetch -------------------------------------------------
 
@@ -152,9 +156,13 @@ bool CommitOffsetRequest::Decode(PayloadReader& r) {
   return r.GetString(metadata);
 }
 
-void CommitOffsetResponse::Encode(PayloadWriter& w) const { header.Encode(w); }
+void CommitOffsetResponse::Encode(PayloadWriter& w) const {
+  header.Encode(w);
+}
 
-bool CommitOffsetResponse::Decode(PayloadReader& r) { return header.Decode(r); }
+bool CommitOffsetResponse::Decode(PayloadReader& r) {
+  return header.Decode(r);
+}
 
 void FetchOffsetRequest::Encode(PayloadWriter& w) const {
   w.PutString(group_id);

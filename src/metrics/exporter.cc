@@ -1,15 +1,15 @@
 #include "pulselog/metrics/exporter.h"
 
+#include <array>
+#include <cerrno>
+#include <cstring>
+
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <poll.h>
 #include <sys/socket.h>
 #include <unistd.h>
-
-#include <array>
-#include <cerrno>
-#include <cstring>
 
 #include "pulselog/base/logging.h"
 #include "pulselog/concurrency/thread_util.h"
@@ -25,6 +25,12 @@ constexpr std::size_t kMaxRequestBytes = 8192;
 // How long a single request may take before the server gives up on it. Keeps
 // one stuck client from blocking the (single-threaded) scrape endpoint.
 constexpr int kRequestTimeoutMs = 5000;
+
+// How often the accept loop wakes to check whether it has been asked to stop.
+// This is the upper bound on shutdown latency for the metrics endpoint, and it
+// is the reason Stop() does not need to close the socket out from under the
+// thread that is polling it.
+constexpr int kAcceptPollIntervalMs = 50;
 
 std::string StatusText(int code) {
   switch (code) {
@@ -43,11 +49,14 @@ std::string StatusText(int code) {
 
 }  // namespace
 
-MetricsExporter::MetricsExporter(MetricRegistry& registry, std::string bind_address,
+MetricsExporter::MetricsExporter(MetricRegistry& registry,
+                                 std::string bind_address,
                                  std::uint16_t port)
     : registry_(registry), bind_address_(std::move(bind_address)), port_(port) {}
 
-MetricsExporter::~MetricsExporter() { Stop(); }
+MetricsExporter::~MetricsExporter() {
+  Stop();
+}
 
 void MetricsExporter::AddHandler(std::string path, HttpHandler handler) {
   handlers_.emplace(std::move(path), std::move(handler));
@@ -106,14 +115,21 @@ void MetricsExporter::Stop() {
   if (!running_.exchange(false, std::memory_order_acq_rel)) return;
   stopping_.store(true, std::memory_order_release);
 
-  // Shutting down the listening socket makes the blocked accept() return, so
-  // the thread exits without needing a signal or a self-connect trick.
+  // Signal, then join, then close -- in that order.
+  //
+  // The obvious shortcut is to close the listening socket here so the serve
+  // thread's poll returns immediately. That is two bugs at once: it races on
+  // `listen_fd_` (ThreadSanitizer catches it), and it closes a descriptor
+  // another thread is actively polling, whose number the kernel is then free
+  // to hand to something else. The serve loop already wakes at its poll
+  // timeout and checks `stopping_`, so waiting for it costs one poll interval
+  // and nothing else.
+  if (thread_.joinable()) thread_.join();
+
   if (listen_fd_ >= 0) {
-    ::shutdown(listen_fd_, SHUT_RDWR);
     ::close(listen_fd_);
     listen_fd_ = -1;
   }
-  if (thread_.joinable()) thread_.join();
 }
 
 void MetricsExporter::ServeLoop() {
@@ -123,12 +139,11 @@ void MetricsExporter::ServeLoop() {
     ::pollfd pfd{};
     pfd.fd = listen_fd_;
     pfd.events = POLLIN;
-    const int ready = ::poll(&pfd, 1, 200);
+    const int ready = ::poll(&pfd, 1, kAcceptPollIntervalMs);
     if (ready <= 0) {
       if (ready < 0 && errno != EINTR) break;
       continue;
     }
-    if (listen_fd_ < 0) break;
 
     const int client = ::accept(listen_fd_, nullptr, nullptr);
     if (client < 0) {
@@ -194,8 +209,8 @@ void MetricsExporter::HandleConnection(int client_fd) {
 
 HttpResponse MetricsExporter::Dispatch(const std::string& path) const {
   if (path == "/metrics") {
-    return HttpResponse{200, "text/plain; version=0.0.4; charset=utf-8",
-                        registry_.RenderPrometheus()};
+    return HttpResponse{
+        200, "text/plain; version=0.0.4; charset=utf-8", registry_.RenderPrometheus()};
   }
   if (path == "/metrics.json") {
     return HttpResponse{200, "application/json", registry_.RenderJson()};

@@ -21,7 +21,7 @@
 
 namespace pulselog {
 
-template <typename T>
+template<typename T>
 class BoundedBlockingQueue {
  public:
   explicit BoundedBlockingQueue(std::size_t capacity) : capacity_(capacity) {}
@@ -30,7 +30,7 @@ class BoundedBlockingQueue {
   BoundedBlockingQueue& operator=(const BoundedBlockingQueue&) = delete;
 
   // Non-blocking. Returns false when the queue is full or closed.
-  template <typename U>
+  template<typename U>
   [[nodiscard]] bool TryPush(U&& value) {
     {
       std::lock_guard<std::mutex> lock(mutex_);
@@ -42,12 +42,12 @@ class BoundedBlockingQueue {
   }
 
   // Blocks until space is available, the deadline passes, or the queue closes.
-  template <typename U>
+  template<typename U>
   [[nodiscard]] bool PushFor(U&& value, std::chrono::milliseconds timeout) {
     {
       std::unique_lock<std::mutex> lock(mutex_);
-      if (!not_full_.wait_for(lock, timeout,
-                              [this] { return closed_ || items_.size() < capacity_; })) {
+      if (!not_full_.wait_for(
+              lock, timeout, [this] { return closed_ || items_.size() < capacity_; })) {
         return false;
       }
       if (closed_) return false;
@@ -85,7 +85,8 @@ class BoundedBlockingQueue {
   // Drains up to `max_items` in one lock acquisition. Batching the handoff is
   // what makes the mutex variant competitive: one lock per batch rather than
   // one per item.
-  [[nodiscard]] std::size_t PopBatch(std::vector<T>& out, std::size_t max_items,
+  [[nodiscard]] std::size_t PopBatch(std::vector<T>& out,
+                                     std::size_t max_items,
                                      std::chrono::milliseconds timeout) {
     std::unique_lock<std::mutex> lock(mutex_);
     if (!not_empty_.wait_for(lock, timeout, [this] { return closed_ || !items_.empty(); })) {

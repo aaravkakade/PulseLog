@@ -58,8 +58,10 @@ struct DurabilityWaiter {
 
 class PartitionReplica {
  public:
-  PartitionReplica(TopicPartition topic_partition, metadata::PartitionAssignment assignment,
-                   BrokerId self, std::unique_ptr<storage::PartitionLog> log);
+  PartitionReplica(TopicPartition topic_partition,
+                   metadata::PartitionAssignment assignment,
+                   BrokerId self,
+                   std::unique_ptr<storage::PartitionLog> log);
 
   PartitionReplica(const PartitionReplica&) = delete;
   PartitionReplica& operator=(const PartitionReplica&) = delete;
@@ -72,9 +74,7 @@ class PartitionReplica {
 
   [[nodiscard]] const storage::PartitionLog& log() const noexcept { return *log_; }
 
-  [[nodiscard]] bool is_leader() const noexcept {
-    return assignment_.leader == self_;
-  }
+  [[nodiscard]] bool is_leader() const noexcept { return assignment_.leader == self_; }
 
   [[nodiscard]] BrokerId leader() const noexcept { return assignment_.leader; }
 
@@ -93,7 +93,9 @@ class PartitionReplica {
 
   // Records a follower's reported progress and recomputes the high-water mark.
   // Returns the new high-water mark.
-  Offset OnFollowerProgress(BrokerId follower, Offset log_end_offset, Offset flushed_offset,
+  Offset OnFollowerProgress(BrokerId follower,
+                            Offset log_end_offset,
+                            Offset flushed_offset,
                             std::int64_t now_ms);
 
   // Drops a follower from the in-sync set (disconnect, or lag beyond the

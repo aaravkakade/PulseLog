@@ -1,10 +1,10 @@
-#include <gtest/gtest.h>
-
 #include <array>
 #include <cstdint>
 #include <numeric>
 #include <random>
 #include <vector>
+
+#include <gtest/gtest.h>
 
 #include "pulselog/base/crc32c.h"
 
@@ -58,8 +58,8 @@ TEST(Crc32c, SeedChainingMatchesSinglePass) {
   for (auto& b : data) b = static_cast<std::uint8_t>(rng());
 
   const std::uint32_t whole = Crc32c(data);
-  for (const std::size_t split : {std::size_t{1}, std::size_t{7}, std::size_t{64},
-                                  std::size_t{1000}, std::size_t{4095}}) {
+  for (const std::size_t split :
+       {std::size_t{1}, std::size_t{7}, std::size_t{64}, std::size_t{1000}, std::size_t{4095}}) {
     const std::uint32_t first = Crc32c(std::span(data.data(), split));
     const std::uint32_t chained =
         Crc32c(std::span(data.data() + split, data.size() - split), first);

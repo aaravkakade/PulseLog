@@ -1,7 +1,7 @@
-#include <gtest/gtest.h>
-
 #include <cstring>
 #include <string>
+
+#include <gtest/gtest.h>
 
 #include "pulselog/base/buffer.h"
 

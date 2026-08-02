@@ -1,8 +1,6 @@
 // End-to-end tests against a real single-broker instance: produce, fetch,
 // ordering, partitioning, acknowledgement modes, restart recovery and
 // backpressure.
-#include <gtest/gtest.h>
-
 #include <algorithm>
 #include <atomic>
 #include <set>
@@ -11,6 +9,7 @@
 #include <vector>
 
 #include "test_support/cluster_fixture.h"
+#include <gtest/gtest.h>
 
 namespace pulselog {
 namespace {

@@ -52,7 +52,7 @@ class Backoff {
   [[nodiscard]] std::uint32_t steps() const noexcept { return step_; }
 
  private:
-  static constexpr std::uint32_t kSpinLimit = 6;   // Up to 63 relax instructions.
+  static constexpr std::uint32_t kSpinLimit = 6;  // Up to 63 relax instructions.
   static constexpr std::uint32_t kYieldLimit = 12;
 
   std::uint32_t step_ = 0;

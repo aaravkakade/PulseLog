@@ -104,7 +104,7 @@ int main(int argc, char** argv) {
   while (g_shutdown_requested == 0 && instance.running()) {
     // Coarse polling: shutdown latency of up to 100 ms is irrelevant next to
     // the flush and join work that follows.
-    struct timespec sleep_time {};
+    struct timespec sleep_time{};
     sleep_time.tv_sec = 0;
     sleep_time.tv_nsec = 100'000'000;
     ::nanosleep(&sleep_time, nullptr);

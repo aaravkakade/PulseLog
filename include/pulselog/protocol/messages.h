@@ -67,9 +67,9 @@ struct ProduceRequest {
 
 struct ProduceResponse {
   ResponseHeader header;
-  Offset base_offset = kInvalidOffset;   // Offset of the first appended record.
-  Offset last_offset = kInvalidOffset;   // Offset of the last appended record.
-  TimestampMs append_time = 0;           // Broker-side append timestamp.
+  Offset base_offset = kInvalidOffset;  // Offset of the first appended record.
+  Offset last_offset = kInvalidOffset;  // Offset of the last appended record.
+  TimestampMs append_time = 0;          // Broker-side append timestamp.
   Offset high_water_mark = kInvalidOffset;
 
   void Encode(PayloadWriter& w) const;
@@ -87,8 +87,8 @@ struct FetchRequest {
   PartitionIndex partition{0};
   Offset fetch_offset = 0;
   std::uint32_t max_bytes = 1U << 20U;
-  std::uint32_t min_bytes = 1;      // Broker waits until this much is available.
-  std::int32_t max_wait_ms = 0;     // ...but no longer than this (long poll).
+  std::uint32_t min_bytes = 1;   // Broker waits until this much is available.
+  std::int32_t max_wait_ms = 0;  // ...but no longer than this (long poll).
   IsolationLevel isolation = IsolationLevel::kReadReplicated;
 
   void Encode(PayloadWriter& w) const;
@@ -138,8 +138,8 @@ struct CreateTopicRequest {
   std::string topic;
   std::int32_t partitions = 1;
   std::int16_t replication_factor = 1;
-  std::int64_t retention_ms = -1;      // -1 = inherit broker default.
-  std::int64_t segment_bytes = -1;     // -1 = inherit broker default.
+  std::int64_t retention_ms = -1;   // -1 = inherit broker default.
+  std::int64_t segment_bytes = -1;  // -1 = inherit broker default.
   Compression compression = Compression::kNone;
   // Set only when the controller is pushing an already-decided topic to a
   // peer. A receiver that sees this applies it locally instead of forwarding
@@ -385,8 +385,8 @@ struct ReplicateRequest {
 struct ReplicateResponse {
   ResponseHeader header;
   BrokerId follower_id{-1};
-  Offset log_end_offset = kInvalidOffset;   // Follower's next free offset.
-  Offset flushed_offset = kInvalidOffset;   // Durable up to (exclusive).
+  Offset log_end_offset = kInvalidOffset;  // Follower's next free offset.
+  Offset flushed_offset = kInvalidOffset;  // Durable up to (exclusive).
   LeaderEpoch leader_epoch = 0;
 
   void Encode(PayloadWriter& w) const;

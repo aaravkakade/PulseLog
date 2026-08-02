@@ -1,8 +1,8 @@
-#include <gtest/gtest.h>
-
 #include <random>
 #include <string>
 #include <vector>
+
+#include <gtest/gtest.h>
 
 #include "pulselog/base/buffer.h"
 #include "pulselog/base/endian.h"
@@ -11,10 +11,19 @@
 namespace pulselog::protocol {
 namespace {
 
-std::size_t Append(ByteBuffer& buf, Offset offset, std::string_view key, std::string_view value,
-                   TimestampMs ts = 1'700'000'000'000, std::uint8_t attributes = 0) {
-  return AppendRecord(buf, offset, ts, attributes, /*key_is_null=*/key.data() == nullptr,
-                      AsBytes(key), AsBytes(value));
+std::size_t Append(ByteBuffer& buf,
+                   Offset offset,
+                   std::string_view key,
+                   std::string_view value,
+                   TimestampMs ts = 1'700'000'000'000,
+                   std::uint8_t attributes = 0) {
+  return AppendRecord(buf,
+                      offset,
+                      ts,
+                      attributes,
+                      /*key_is_null=*/key.data() == nullptr,
+                      AsBytes(key),
+                      AsBytes(value));
 }
 
 TEST(Record, RoundTripWithKey) {
@@ -73,14 +82,17 @@ TEST(Record, EmptyValueAndTombstone) {
 }
 
 TEST(Record, EncodedSizeMatchesActual) {
-  for (const std::size_t key_len : {std::size_t{0}, std::size_t{1}, std::size_t{127},
-                                    std::size_t{128}, std::size_t{16383}, std::size_t{16384}}) {
+  for (const std::size_t key_len : {std::size_t{0},
+                                    std::size_t{1},
+                                    std::size_t{127},
+                                    std::size_t{128},
+                                    std::size_t{16383},
+                                    std::size_t{16384}}) {
     for (const std::size_t value_len : {std::size_t{0}, std::size_t{100}, std::size_t{20000}}) {
       const std::string key(key_len, 'k');
       const std::string value(value_len, 'v');
       ByteBuffer buf;
-      const std::size_t written =
-          AppendRecord(buf, 0, 0, 0, false, AsBytes(key), AsBytes(value));
+      const std::size_t written = AppendRecord(buf, 0, 0, 0, false, AsBytes(key), AsBytes(value));
       EXPECT_EQ(written, EncodedRecordSize(false, key_len, value_len))
           << "key=" << key_len << " value=" << value_len;
       EXPECT_EQ(buf.ReadableBytes(), written);

@@ -1,9 +1,9 @@
 #include "pulselog/net/sync_client.h"
 
-#include <poll.h>
-
 #include <algorithm>
 #include <cerrno>
+
+#include <poll.h>
 
 #include "pulselog/base/clock.h"
 
@@ -11,7 +11,8 @@ namespace pulselog::net {
 
 Status SyncClient::Connect(const Endpoint& endpoint) {
   Close();
-  PL_ASSIGN_OR_RETURN(socket_, TcpSocket::ConnectWithTimeout(endpoint, options_.connect_timeout_ms));
+  PL_ASSIGN_OR_RETURN(socket_,
+                      TcpSocket::ConnectWithTimeout(endpoint, options_.connect_timeout_ms));
   PL_RETURN_IF_ERROR(socket_.SetNoDelay(true));
   endpoint_ = endpoint;
   input_.Clear();
@@ -125,7 +126,8 @@ Result<protocol::FrameDecoder::Frame> SyncClient::ReadResponse(RequestId expecte
 }
 
 Result<protocol::FrameDecoder::Frame> SyncClient::Call(protocol::OpCode opcode,
-                                                       RequestId request_id, ByteSpan payload) {
+                                                       RequestId request_id,
+                                                       ByteSpan payload) {
   PL_RETURN_IF_ERROR(SendRequest(opcode, request_id, payload));
   return ReadResponse(request_id);
 }

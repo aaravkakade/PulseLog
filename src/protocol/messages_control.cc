@@ -89,13 +89,21 @@ bool CreateTopicResponse::Decode(PayloadReader& r) {
   return r.GetI32(partitions);
 }
 
-void DeleteTopicRequest::Encode(PayloadWriter& w) const { w.PutString(topic); }
+void DeleteTopicRequest::Encode(PayloadWriter& w) const {
+  w.PutString(topic);
+}
 
-bool DeleteTopicRequest::Decode(PayloadReader& r) { return r.GetString(topic); }
+bool DeleteTopicRequest::Decode(PayloadReader& r) {
+  return r.GetString(topic);
+}
 
-void DeleteTopicResponse::Encode(PayloadWriter& w) const { header.Encode(w); }
+void DeleteTopicResponse::Encode(PayloadWriter& w) const {
+  header.Encode(w);
+}
 
-bool DeleteTopicResponse::Decode(PayloadReader& r) { return header.Decode(r); }
+bool DeleteTopicResponse::Decode(PayloadReader& r) {
+  return header.Decode(r);
+}
 
 // --- Metadata --------------------------------------------------------------
 
@@ -194,7 +202,9 @@ bool MetadataResponse::Decode(PayloadReader& r) {
 
 void ListTopicsRequest::Encode(PayloadWriter&) const {}
 
-bool ListTopicsRequest::Decode(PayloadReader&) { return true; }
+bool ListTopicsRequest::Decode(PayloadReader&) {
+  return true;
+}
 
 void ListTopicsResponse::Encode(PayloadWriter& w) const {
   header.Encode(w);
@@ -228,7 +238,9 @@ bool ListTopicsResponse::Decode(PayloadReader& r) {
 
 void HealthRequest::Encode(PayloadWriter&) const {}
 
-bool HealthRequest::Decode(PayloadReader&) { return true; }
+bool HealthRequest::Decode(PayloadReader&) {
+  return true;
+}
 
 void HealthResponse::Encode(PayloadWriter& w) const {
   header.Encode(w);
@@ -254,7 +266,9 @@ bool HealthResponse::Decode(PayloadReader& r) {
 
 void DescribeClusterRequest::Encode(PayloadWriter&) const {}
 
-bool DescribeClusterRequest::Decode(PayloadReader&) { return true; }
+bool DescribeClusterRequest::Decode(PayloadReader&) {
+  return true;
+}
 
 void DescribeClusterResponse::Encode(PayloadWriter& w) const {
   header.Encode(w);

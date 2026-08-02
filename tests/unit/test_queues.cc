@@ -5,13 +5,13 @@
 // quantities (every produced item is consumed exactly once, sums match) rather
 // than by timing, so the tests are deterministic in outcome even though the
 // interleavings are not.
-#include <gtest/gtest.h>
-
 #include <atomic>
 #include <memory>
 #include <numeric>
 #include <thread>
 #include <vector>
+
+#include <gtest/gtest.h>
 
 #include "pulselog/concurrency/backoff.h"
 #include "pulselog/concurrency/blocking_queue.h"
@@ -84,6 +84,7 @@ TEST(SpscRing, PreservesFifoOrderAcrossThreads) {
 
 TEST(SpscRing, DestroysUndrainedElements) {
   auto alive = std::make_shared<std::atomic<int>>(0);
+
   struct Counted {
     std::shared_ptr<std::atomic<int>> counter;
 

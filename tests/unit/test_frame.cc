@@ -1,7 +1,7 @@
-#include <gtest/gtest.h>
-
 #include <random>
 #include <vector>
+
+#include <gtest/gtest.h>
 
 #include "pulselog/base/buffer.h"
 #include "pulselog/base/crc32c.h"
@@ -11,14 +11,15 @@
 namespace pulselog::protocol {
 namespace {
 
-ByteBuffer MakeFrame(OpCode op, RequestId id, std::string_view payload,
-                     std::uint16_t flags = 0) {
+ByteBuffer MakeFrame(OpCode op, RequestId id, std::string_view payload, std::uint16_t flags = 0) {
   ByteBuffer buf;
   EncodeFrame(buf, op, id, flags, AsBytes(payload));
   return buf;
 }
 
-TEST(Frame, HeaderSizeIsFixed) { EXPECT_EQ(kFrameHeaderSize, 32U); }
+TEST(Frame, HeaderSizeIsFixed) {
+  EXPECT_EQ(kFrameHeaderSize, 32U);
+}
 
 TEST(Frame, MagicIsPlsgInStreamOrder) {
   ByteBuffer buf = MakeFrame(OpCode::kHealth, 1, "");
@@ -98,7 +99,10 @@ TEST(Frame, ByteAtATimeDelivery) {
   // mis-parse, or lose anything.
   ByteBuffer wire;
   for (int i = 0; i < 3; ++i) {
-    EncodeFrame(wire, OpCode::kProduce, static_cast<RequestId>(i), 0,
+    EncodeFrame(wire,
+                OpCode::kProduce,
+                static_cast<RequestId>(i),
+                0,
                 AsBytes("record-" + std::to_string(i)));
   }
 

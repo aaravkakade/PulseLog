@@ -98,8 +98,8 @@ void EncodeFrame(ByteBuffer& out, const FrameHeader& header, ByteSpan payload) {
   if (!payload.empty()) out.Append(payload);
 }
 
-void EncodeFrame(ByteBuffer& out, OpCode opcode, RequestId request_id, std::uint16_t flags,
-                 ByteSpan payload) {
+void EncodeFrame(
+    ByteBuffer& out, OpCode opcode, RequestId request_id, std::uint16_t flags, ByteSpan payload) {
   FrameHeader header;
   header.opcode = opcode;
   header.request_id = request_id;

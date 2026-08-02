@@ -14,7 +14,7 @@ bool ResponseHeader::Decode(PayloadReader& r) {
   // Unknown codes from a newer broker degrade to kUnknown rather than failing
   // the whole decode -- the message text still reaches the operator.
   error = raw <= static_cast<std::uint16_t>(ErrorCode::kInternal) ? static_cast<ErrorCode>(raw)
-                                                                 : ErrorCode::kUnknown;
+                                                                  : ErrorCode::kUnknown;
   return r.GetString(error_message);
 }
 

@@ -1,5 +1,3 @@
-#include <gtest/gtest.h>
-
 #include <algorithm>
 #include <atomic>
 #include <cmath>
@@ -7,11 +5,13 @@
 #include <thread>
 #include <vector>
 
+#include "test_support/http_client.h"
+#include <gtest/gtest.h>
+
 #include "pulselog/metrics/exporter.h"
 #include "pulselog/metrics/histogram.h"
 #include "pulselog/metrics/process_stats.h"
 #include "pulselog/metrics/registry.h"
-#include "test_support/http_client.h"
 
 namespace pulselog::metrics {
 namespace {
@@ -60,8 +60,8 @@ TEST(Histogram, PrecisionBoundHoldsAcrossTheRange) {
       Histogram single(1'000'000'000'000, 3);
       single.Record(value);
       const std::int64_t reported = single.ValueAtPercentile(50.0);
-      const double error = std::abs(static_cast<double>(reported - value)) /
-                           static_cast<double>(value);
+      const double error =
+          std::abs(static_cast<double>(reported - value)) / static_cast<double>(value);
       EXPECT_LE(error, 0.001) << "value " << value << " reported as " << reported;
     }
   }
@@ -301,9 +301,8 @@ TEST(Exporter, ServesMetricsAndHealth) {
   registry.GetCounter("test_counter", "a counter").Increment(11);
 
   MetricsExporter exporter(registry, "127.0.0.1", 0);
-  exporter.AddHandler("/topology", [] {
-    return HttpResponse{200, "application/json", R"({"brokers":[]})"};
-  });
+  exporter.AddHandler("/topology",
+                      [] { return HttpResponse{200, "application/json", R"({"brokers":[]})"}; });
   ASSERT_TRUE(exporter.Start().ok());
   ASSERT_GT(exporter.port(), 0);
 

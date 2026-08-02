@@ -3,13 +3,13 @@
 // These exist to justify specific implementation choices with numbers rather
 // than intuition. Each one is paired with a claim made somewhere in the source
 // or the docs; if the benchmark stops supporting the claim, the claim changes.
-#include <benchmark/benchmark.h>
-
 #include <cstring>
 #include <random>
 #include <string>
 #include <thread>
 #include <vector>
+
+#include <benchmark/benchmark.h>
 
 #include "pulselog/base/buffer.h"
 #include "pulselog/base/crc32c.h"
@@ -41,6 +41,7 @@ void BM_Crc32cHardware(benchmark::State& state) {
   state.SetBytesProcessed(state.iterations() * state.range(0));
   state.SetLabel(std::string(Crc32cImplementationName()));
 }
+
 BENCHMARK(BM_Crc32cHardware)->Arg(64)->Arg(256)->Arg(4096)->Arg(65536);
 
 void BM_Crc32cSoftware(benchmark::State& state) {
@@ -51,6 +52,7 @@ void BM_Crc32cSoftware(benchmark::State& state) {
   state.SetBytesProcessed(state.iterations() * state.range(0));
   state.SetLabel("software-slice-by-8");
 }
+
 BENCHMARK(BM_Crc32cSoftware)->Arg(64)->Arg(256)->Arg(4096)->Arg(65536);
 
 // --- record encoding --------------------------------------------------------
@@ -64,20 +66,19 @@ void BM_RecordEncode(benchmark::State& state) {
 
   for (auto _ : state) {
     buffer.Clear();
-    protocol::AppendRecord(buffer, 42, 1'700'000'000'000, 0, false, AsBytes(key),
-                           AsBytes(value));
+    protocol::AppendRecord(buffer, 42, 1'700'000'000'000, 0, false, AsBytes(key), AsBytes(value));
     benchmark::DoNotOptimize(buffer.ReadPtr());
   }
   state.SetBytesProcessed(state.iterations() * static_cast<std::int64_t>(value_size));
 }
+
 BENCHMARK(BM_RecordEncode)->Arg(16)->Arg(128)->Arg(1024)->Arg(65536);
 
 void BM_RecordParseWithCrc(benchmark::State& state) {
   const std::string key = "user-1234";
   const std::string value(static_cast<std::size_t>(state.range(0)), 'v');
   ByteBuffer buffer;
-  protocol::AppendRecord(buffer, 42, 1'700'000'000'000, 0, false, AsBytes(key),
-                         AsBytes(value));
+  protocol::AppendRecord(buffer, 42, 1'700'000'000'000, 0, false, AsBytes(key), AsBytes(value));
 
   for (auto _ : state) {
     protocol::RecordView view;
@@ -87,6 +88,7 @@ void BM_RecordParseWithCrc(benchmark::State& state) {
   }
   state.SetBytesProcessed(state.iterations() * state.range(0));
 }
+
 BENCHMARK(BM_RecordParseWithCrc)->Arg(16)->Arg(128)->Arg(1024)->Arg(65536);
 
 void BM_RecordParseNoCrc(benchmark::State& state) {
@@ -95,8 +97,7 @@ void BM_RecordParseNoCrc(benchmark::State& state) {
   const std::string key = "user-1234";
   const std::string value(static_cast<std::size_t>(state.range(0)), 'v');
   ByteBuffer buffer;
-  protocol::AppendRecord(buffer, 42, 1'700'000'000'000, 0, false, AsBytes(key),
-                         AsBytes(value));
+  protocol::AppendRecord(buffer, 42, 1'700'000'000'000, 0, false, AsBytes(key), AsBytes(value));
 
   for (auto _ : state) {
     protocol::RecordView view;
@@ -106,6 +107,7 @@ void BM_RecordParseNoCrc(benchmark::State& state) {
   }
   state.SetBytesProcessed(state.iterations() * state.range(0));
 }
+
 BENCHMARK(BM_RecordParseNoCrc)->Arg(16)->Arg(128)->Arg(1024)->Arg(65536);
 
 // --- framing ----------------------------------------------------------------
@@ -124,6 +126,7 @@ void BM_FrameEncodeDecode(benchmark::State& state) {
   }
   state.SetBytesProcessed(state.iterations() * state.range(0));
 }
+
 BENCHMARK(BM_FrameEncodeDecode)->Arg(64)->Arg(1024)->Arg(65536);
 
 // --- buffers ----------------------------------------------------------------
@@ -137,6 +140,7 @@ void BM_BufferAllocateFresh(benchmark::State& state) {
     benchmark::DoNotOptimize(buffer->ReadPtr());
   }
 }
+
 BENCHMARK(BM_BufferAllocateFresh)->Arg(4096)->Arg(65536)->Arg(262144);
 
 void BM_BufferFromPool(benchmark::State& state) {
@@ -156,6 +160,7 @@ void BM_BufferFromPool(benchmark::State& state) {
     pool.Release(std::move(buffer));
   }
 }
+
 BENCHMARK(BM_BufferFromPool)->Arg(4096)->Arg(65536)->Arg(262144);
 
 // --- queues -----------------------------------------------------------------
@@ -172,6 +177,7 @@ void BM_SpscRingRoundTrip(benchmark::State& state) {
   }
   state.SetItemsProcessed(state.iterations());
 }
+
 BENCHMARK(BM_SpscRingRoundTrip);
 
 void BM_MpmcQueueRoundTrip(benchmark::State& state) {
@@ -183,6 +189,7 @@ void BM_MpmcQueueRoundTrip(benchmark::State& state) {
   }
   state.SetItemsProcessed(state.iterations());
 }
+
 BENCHMARK(BM_MpmcQueueRoundTrip);
 
 void BM_BlockingQueueRoundTrip(benchmark::State& state) {
@@ -193,6 +200,7 @@ void BM_BlockingQueueRoundTrip(benchmark::State& state) {
   }
   state.SetItemsProcessed(state.iterations());
 }
+
 BENCHMARK(BM_BlockingQueueRoundTrip);
 
 // Contended: several producers into one queue, which is the shape the io
@@ -214,6 +222,7 @@ void BM_MpmcQueueContended(benchmark::State& state) {
     queue = nullptr;
   }
 }
+
 BENCHMARK(BM_MpmcQueueContended)->Threads(1)->Threads(2)->Threads(4);
 
 }  // namespace

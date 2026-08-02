@@ -55,9 +55,10 @@ class PartitionManager {
 
   // Opens a partition this broker hosts but has not opened yet (for example
   // after a metadata refresh).
-  [[nodiscard]] Result<PartitionReplica*> OpenPartition(const TopicPartition& topic_partition,
-                                                        const metadata::TopicConfig& topic_config,
-                                                        const metadata::PartitionAssignment& assignment);
+  [[nodiscard]] Result<PartitionReplica*> OpenPartition(
+      const TopicPartition& topic_partition,
+      const metadata::TopicConfig& topic_config,
+      const metadata::PartitionAssignment& assignment);
 
   // Opens every partition this broker hosts for `topic` according to current
   // metadata. Used after learning about a topic from another broker.

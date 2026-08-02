@@ -71,7 +71,8 @@ Assignment AssignRoundRobin(const std::vector<std::string>& member_ids,
   return assignment;
 }
 
-Assignment Assign(AssignmentStrategy strategy, const std::vector<std::string>& member_ids,
+Assignment Assign(AssignmentStrategy strategy,
+                  const std::vector<std::string>& member_ids,
                   const std::vector<TopicPartition>& partitions) {
   switch (strategy) {
     case AssignmentStrategy::kRoundRobin:

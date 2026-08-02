@@ -66,7 +66,9 @@ class RequestExecutor {
 
 class PartitionWorker {
  public:
-  PartitionWorker(std::size_t index, std::size_t queue_capacity, RequestExecutor& executor,
+  PartitionWorker(std::size_t index,
+                  std::size_t queue_capacity,
+                  RequestExecutor& executor,
                   int pin_cpu = -1);
 
   PartitionWorker(const PartitionWorker&) = delete;

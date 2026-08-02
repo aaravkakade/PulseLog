@@ -160,7 +160,9 @@ std::uint32_t Crc32c(std::span<const std::uint8_t> data, std::uint32_t seed) noe
   }
 }
 
-bool Crc32cHardwareAvailable() noexcept { return kImpl != Impl::kSoftware; }
+bool Crc32cHardwareAvailable() noexcept {
+  return kImpl != Impl::kSoftware;
+}
 
 std::string_view Crc32cImplementationName() noexcept {
   switch (kImpl) {

@@ -1,17 +1,17 @@
 // Storage engine tests: append, read, segment rolling, indexing, recovery,
 // corruption handling, truncation and retention.
-#include <gtest/gtest.h>
-
 #include <algorithm>
 #include <random>
 #include <string>
 #include <vector>
 
+#include "test_support/temp_dir.h"
+#include <gtest/gtest.h>
+
 #include "pulselog/base/buffer.h"
 #include "pulselog/protocol/record.h"
 #include "pulselog/storage/partition_log.h"
 #include "pulselog/storage/segment.h"
-#include "test_support/temp_dir.h"
 
 namespace pulselog::storage {
 namespace {
@@ -21,7 +21,9 @@ using protocol::RecordIterator;
 using protocol::RecordView;
 
 // Builds a produce-style batch: records with offset 0, as a client would send.
-ByteBuffer MakeBatch(int count, std::string_view key_prefix, std::size_t value_size,
+ByteBuffer MakeBatch(int count,
+                     std::string_view key_prefix,
+                     std::size_t value_size,
                      TimestampMs timestamp = 0) {
   ByteBuffer buf;
   const std::string value(value_size, 'v');
@@ -52,14 +54,15 @@ LogOptions MakeOptions(const std::filesystem::path& dir, std::int64_t segment_by
 std::unique_ptr<PartitionLog> OpenLog(const std::filesystem::path& dir,
                                       std::int64_t segment_bytes = 1 << 20,
                                       RecoveryReport* report = nullptr) {
-  auto log = PartitionLog::Open(TopicPartition{"t", PartitionIndex{0}},
-                                MakeOptions(dir, segment_bytes), report);
+  auto log = PartitionLog::Open(
+      TopicPartition{"t", PartitionIndex{0}}, MakeOptions(dir, segment_bytes), report);
   EXPECT_TRUE(log.ok()) << log.status().ToString();
   return std::move(log).value();
 }
 
 // Reads every record from `from` and returns the values in order.
-std::vector<std::string> ReadValues(const PartitionLog& log, Offset from,
+std::vector<std::string> ReadValues(const PartitionLog& log,
+                                    Offset from,
                                     std::size_t max_bytes = 1 << 20) {
   ByteBuffer out;
   auto result = log.Read(from, max_bytes, out);
@@ -435,8 +438,7 @@ TEST(PartitionLog, GarbageAppendedToLogIsIgnored) {
   }
 
   {
-    std::ofstream out(dir.Child("00000000000000000000.log"),
-                      std::ios::binary | std::ios::app);
+    std::ofstream out(dir.Child("00000000000000000000.log"), std::ios::binary | std::ios::app);
     const std::string garbage(500, '\xCC');
     out.write(garbage.data(), static_cast<std::streamsize>(garbage.size()));
   }

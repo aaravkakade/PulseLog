@@ -73,9 +73,9 @@ Result<std::unique_ptr<OffsetStore>> OffsetStore::Open(const std::filesystem::pa
   options.flush.max_unflushed_bytes = 256 * 1024;
   options.flush.max_unflushed_records = 100;
 
-  PL_ASSIGN_OR_RETURN(
-      auto log, storage::PartitionLog::Open(TopicPartition{"__offsets", PartitionIndex{0}},
-                                            options, nullptr));
+  PL_ASSIGN_OR_RETURN(auto log,
+                      storage::PartitionLog::Open(
+                          TopicPartition{"__offsets", PartitionIndex{0}}, options, nullptr));
 
   std::unique_ptr<OffsetStore> store(new OffsetStore(std::move(log), sync_on_commit));
   PL_RETURN_IF_ERROR(store->Replay());
@@ -127,7 +127,9 @@ Status OffsetStore::Replay() {
   return OkStatus();
 }
 
-Status OffsetStore::Commit(const OffsetKey& key, Offset offset, std::string_view metadata,
+Status OffsetStore::Commit(const OffsetKey& key,
+                           Offset offset,
+                           std::string_view metadata,
                            TimestampMs now) {
   std::lock_guard<std::mutex> lock(mutex_);
 
@@ -137,8 +139,13 @@ Status OffsetStore::Commit(const OffsetKey& key, Offset offset, std::string_view
   EncodeValue(value_bytes, offset, metadata, now);
 
   scratch_.Clear();
-  protocol::AppendRecord(scratch_, /*offset=*/0, now, /*attributes=*/0, /*key_is_null=*/false,
-                         key_bytes.Readable(), value_bytes.Readable());
+  protocol::AppendRecord(scratch_,
+                         /*offset=*/0,
+                         now,
+                         /*attributes=*/0,
+                         /*key_is_null=*/false,
+                         key_bytes.Readable(),
+                         value_bytes.Readable());
 
   const MutableByteSpan records(const_cast<std::uint8_t*>(scratch_.ReadPtr()),
                                 scratch_.ReadableBytes());

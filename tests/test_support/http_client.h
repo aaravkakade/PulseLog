@@ -2,20 +2,21 @@
 #ifndef PULSELOG_TESTS_TEST_SUPPORT_HTTP_CLIENT_H_
 #define PULSELOG_TESTS_TEST_SUPPORT_HTTP_CLIENT_H_
 
+#include <array>
+#include <cstdint>
+#include <string>
+
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
-#include <array>
-#include <cstdint>
-#include <string>
-
 namespace pulselog::testing {
 
 // Returns the raw response (status line, headers and body), or an empty string
 // if the request failed.
-inline std::string HttpGetRaw(std::uint16_t port, const std::string& path,
+inline std::string HttpGetRaw(std::uint16_t port,
+                              const std::string& path,
                               const std::string& host = "127.0.0.1") {
   const int fd = ::socket(AF_INET, SOCK_STREAM, 0);
   if (fd < 0) return {};

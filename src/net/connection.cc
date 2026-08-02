@@ -12,8 +12,13 @@ constexpr std::string_view kComponent = "net.conn";
 
 }  // namespace
 
-Connection::Connection(Id id, TcpSocket socket, EventLoop& loop, BufferPool& pool,
-                       ConnectionOptions options, FrameCallback on_frame, CloseCallback on_close)
+Connection::Connection(Id id,
+                       TcpSocket socket,
+                       EventLoop& loop,
+                       BufferPool& pool,
+                       ConnectionOptions options,
+                       FrameCallback on_frame,
+                       CloseCallback on_close)
     : id_(id),
       socket_(std::move(socket)),
       loop_(loop),
@@ -96,7 +101,9 @@ void Connection::OnClosed() {
   socket_.Close();
 }
 
-bool Connection::SendFrame(protocol::OpCode opcode, RequestId request_id, std::uint16_t flags,
+bool Connection::SendFrame(protocol::OpCode opcode,
+                           RequestId request_id,
+                           std::uint16_t flags,
                            ByteSpan payload) {
   if (closing_) return false;
 

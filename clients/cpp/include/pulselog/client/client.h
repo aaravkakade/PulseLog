@@ -127,7 +127,7 @@ class ClientContext {
   // body and report PROTOCOL_ERROR instead of the real error. Reading the
   // header first is what makes PROTOCOL.md's promise true: a client can always
   // surface the error, even for a response body it cannot parse.
-  template <typename Response>
+  template<typename Response>
   [[nodiscard]] static Status DecodeResponse(ByteSpan payload, Response& response) {
     protocol::PayloadReader header_reader(payload);
     if (!response.header.Decode(header_reader)) {
@@ -160,7 +160,8 @@ class AdminClient {
  public:
   explicit AdminClient(ClientContext& context) : context_(context) {}
 
-  [[nodiscard]] Status CreateTopic(const std::string& topic, std::int32_t partitions,
+  [[nodiscard]] Status CreateTopic(const std::string& topic,
+                                   std::int32_t partitions,
                                    std::int16_t replication_factor = 1);
 
   [[nodiscard]] Status DeleteTopic(const std::string& topic);
@@ -208,8 +209,7 @@ class Producer {
   // partition and flushed the previous batch -- the returned result describes
   // that batch. Summing `record_count` over every return value therefore
   // accounts for every record the broker acknowledged.
-  [[nodiscard]] Result<DeliveryResult> Send(const std::string& topic,
-                                            const OutboundRecord& record);
+  [[nodiscard]] Result<DeliveryResult> Send(const std::string& topic, const OutboundRecord& record);
 
   // Publishes a batch to one partition in a single request.
   [[nodiscard]] Result<DeliveryResult> SendBatch(const std::string& topic,
@@ -233,7 +233,8 @@ class Producer {
 
  private:
   [[nodiscard]] Result<DeliveryResult> SendEncoded(const std::string& topic,
-                                                   PartitionIndex partition, ByteSpan records,
+                                                   PartitionIndex partition,
+                                                   ByteSpan records,
                                                    std::uint32_t record_count);
 
   [[nodiscard]] Result<PartitionIndex> RouteFor(const std::string& topic,
@@ -287,9 +288,11 @@ class Consumer {
   // Reads from one partition starting at `offset`. Records are valid until the
   // next call.
   [[nodiscard]] Result<std::vector<InboundRecord>> Fetch(const std::string& topic,
-                                                         PartitionIndex partition, Offset offset);
+                                                         PartitionIndex partition,
+                                                         Offset offset);
 
-  [[nodiscard]] Result<Offset> ListOffset(const std::string& topic, PartitionIndex partition,
+  [[nodiscard]] Result<Offset> ListOffset(const std::string& topic,
+                                          PartitionIndex partition,
                                           TimestampMs timestamp);
 
   // --- group use ------------------------------------------------------------
@@ -308,11 +311,11 @@ class Consumer {
   // from. The committed offset is the next one to consume.
   [[nodiscard]] Status Commit();
 
-  [[nodiscard]] Status CommitOffset(const std::string& topic, PartitionIndex partition,
+  [[nodiscard]] Status CommitOffset(const std::string& topic,
+                                    PartitionIndex partition,
                                     Offset offset);
 
-  [[nodiscard]] Result<Offset> CommittedOffset(const std::string& topic,
-                                               PartitionIndex partition);
+  [[nodiscard]] Result<Offset> CommittedOffset(const std::string& topic, PartitionIndex partition);
 
   [[nodiscard]] Status Heartbeat();
 

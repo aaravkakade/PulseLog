@@ -69,7 +69,7 @@ struct TrialResult {
   double duration_seconds = 0.0;
   double records_per_second = 0.0;
   double megabytes_per_second = 0.0;
-  metrics::HistogramSnapshot latency;   // Nanoseconds, per request.
+  metrics::HistogramSnapshot latency;  // Nanoseconds, per request.
   std::int64_t errors = 0;
   double cpu_percent = 0.0;
   std::uint64_t peak_rss_bytes = 0;
@@ -231,9 +231,8 @@ TrialResult RunProduce(const BenchConfig& config, bool with_consumers) {
         errors.fetch_add(1, std::memory_order_relaxed);
       }
 
-      produced.fetch_add(
-          static_cast<std::int64_t>(producer.stats().records_sent - records_before),
-          std::memory_order_relaxed);
+      produced.fetch_add(static_cast<std::int64_t>(producer.stats().records_sent - records_before),
+                         std::memory_order_relaxed);
       bytes.fetch_add(static_cast<std::int64_t>(producer.stats().bytes_sent - bytes_before),
                       std::memory_order_relaxed);
     });
@@ -248,8 +247,7 @@ TrialResult RunProduce(const BenchConfig& config, bool with_consumers) {
   result.records = produced.load();
   result.bytes = bytes.load();
   result.errors = errors.load();
-  result.duration_seconds =
-      static_cast<double>(measure_end_nanos - measure_start_nanos) / 1e9;
+  result.duration_seconds = static_cast<double>(measure_end_nanos - measure_start_nanos) / 1e9;
   if (result.duration_seconds > 0) {
     result.records_per_second = static_cast<double>(result.records) / result.duration_seconds;
     result.megabytes_per_second =
@@ -301,8 +299,7 @@ TrialResult RunMutexQueueBaseline(const BenchConfig& config) {
         ++local;
       }
       produced.fetch_add(local, std::memory_order_relaxed);
-      bytes.fetch_add(local * static_cast<std::int64_t>(payload.size()),
-                      std::memory_order_relaxed);
+      bytes.fetch_add(local * static_cast<std::int64_t>(payload.size()), std::memory_order_relaxed);
     });
   }
   for (auto& thread : threads) thread.join();
@@ -323,7 +320,8 @@ TrialResult RunMutexQueueBaseline(const BenchConfig& config) {
 
 // --- reporting -------------------------------------------------------------
 
-void WriteJson(std::ostream& out, const BenchConfig& config,
+void WriteJson(std::ostream& out,
+               const BenchConfig& config,
                const std::vector<TrialResult>& trials) {
   const auto host = metrics::ProcessStatsSampler::DescribeHost();
 

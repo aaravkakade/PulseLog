@@ -38,10 +38,11 @@ std::string JsonEscape(std::string_view value) {
 
 }  // namespace
 
-Broker::Broker(BrokerConfig config)
-    : config_(std::move(config)), partitions_(config_, cluster_) {}
+Broker::Broker(BrokerConfig config) : config_(std::move(config)), partitions_(config_, cluster_) {}
 
-Broker::~Broker() { Stop(); }
+Broker::~Broker() {
+  Stop();
+}
 
 Status Broker::LoadOrInitialiseMetadata() {
   // Cluster membership. A broker with no configured peers is a single-node
@@ -135,9 +136,10 @@ Result<metadata::TopicDescriptor> Broker::EnsureTopic(const std::string& topic,
       }
     }
 
-    auto frame = controller_client_->Call(
-        protocol::OpCode::kCreateTopic,
-        control_request_id_.fetch_add(1, std::memory_order_relaxed), payload.Readable());
+    auto frame =
+        controller_client_->Call(protocol::OpCode::kCreateTopic,
+                                 control_request_id_.fetch_add(1, std::memory_order_relaxed),
+                                 payload.Readable());
     if (!frame.ok()) {
       controller_client_->Close();
       return frame.status().WithContext("forwarding topic creation to the controller");
@@ -222,13 +224,14 @@ Status Broker::ReconcileMetadataFromController() {
       controller_client_ = std::make_unique<net::SyncClient>(options);
     }
     if (!controller_client_->connected()) {
-      PL_RETURN_IF_ERROR(controller_client_->Connect(
-          net::Endpoint{endpoint->host, endpoint->port}));
+      PL_RETURN_IF_ERROR(
+          controller_client_->Connect(net::Endpoint{endpoint->host, endpoint->port}));
     }
 
-    auto frame = controller_client_->Call(
-        protocol::OpCode::kMetadata,
-        control_request_id_.fetch_add(1, std::memory_order_relaxed), payload.Readable());
+    auto frame =
+        controller_client_->Call(protocol::OpCode::kMetadata,
+                                 control_request_id_.fetch_add(1, std::memory_order_relaxed),
+                                 payload.Readable());
     if (!frame.ok()) {
       controller_client_->Close();
       return frame.status();
@@ -246,9 +249,8 @@ Status Broker::ReconcileMetadataFromController() {
     descriptor.config.name = topic.name;
     descriptor.config.partition_count = static_cast<std::int32_t>(topic.partitions.size());
     descriptor.config.replication_factor =
-        topic.partitions.empty()
-            ? static_cast<std::int16_t>(1)
-            : static_cast<std::int16_t>(topic.partitions[0].replicas.size());
+        topic.partitions.empty() ? static_cast<std::int16_t>(1)
+                                 : static_cast<std::int16_t>(topic.partitions[0].replicas.size());
     for (const auto& partition : topic.partitions) {
       metadata::PartitionAssignment assignment;
       assignment.index = partition.index;
@@ -334,8 +336,8 @@ Status Broker::Start() {
     worker_pools_.push_back(std::make_unique<BufferPool>(pool_options));
 
     const int pin = config_.pin_workers ? static_cast<int>(i) : -1;
-    workers_.push_back(std::make_unique<PartitionWorker>(i, config_.worker_queue_capacity, *this,
-                                                         pin));
+    workers_.push_back(
+        std::make_unique<PartitionWorker>(i, config_.worker_queue_capacity, *this, pin));
   }
   for (auto& worker : workers_) worker->Start();
 
@@ -374,15 +376,15 @@ Status Broker::Start() {
     replicator_options.timeout_ms = config_.replication_timeout_ms;
     replicator_options.max_bytes = config_.replication_max_bytes;
     replicator_options.lag_max_ms = config_.replica_lag_max_ms;
-    replicator_ = std::make_unique<replication::Replicator>(replicator_options, partitions_,
-                                                            cluster_);
+    replicator_ =
+        std::make_unique<replication::Replicator>(replicator_options, partitions_, cluster_);
     PL_RETURN_IF_ERROR(replicator_->Start());
   }
 
   // Metrics endpoint.
   if (config_.metrics_enabled) {
-    exporter_ = std::make_unique<metrics::MetricsExporter>(registry_, config_.metrics_host,
-                                                           config_.metrics_port);
+    exporter_ = std::make_unique<metrics::MetricsExporter>(
+        registry_, config_.metrics_host, config_.metrics_port);
     exporter_->AddHandler("/topology", [this] {
       return metrics::HttpResponse{200, "application/json", BuildTopologyJson()};
     });
@@ -464,7 +466,9 @@ net::Endpoint Broker::endpoint() const {
   return server_ ? server_->bound_endpoint() : config_.listen;
 }
 
-std::uint16_t Broker::metrics_port() const { return exporter_ ? exporter_->port() : 0; }
+std::uint16_t Broker::metrics_port() const {
+  return exporter_ ? exporter_->port() : 0;
+}
 
 std::int64_t Broker::uptime_ms() const {
   if (start_nanos_ == 0) return 0;
@@ -472,8 +476,8 @@ std::int64_t Broker::uptime_ms() const {
 }
 
 void Broker::FlusherLoop() {
-  const auto interval = std::chrono::milliseconds(std::max<std::int64_t>(
-      1, config_.flusher_interval_ms));
+  const auto interval =
+      std::chrono::milliseconds(std::max<std::int64_t>(1, config_.flusher_interval_ms));
 
   while (!stopping_.load(std::memory_order_acquire)) {
     std::this_thread::sleep_for(interval);
@@ -582,8 +586,8 @@ std::string Broker::BuildTopologyJson() const {
     if (!first) out << ',';
     first = false;
     out << "{\"id\":" << broker.id.value() << ",\"host\":\"" << JsonEscape(broker.host)
-        << "\",\"port\":" << broker.port << ",\"self\":"
-        << (broker.id == config_.broker_id ? "true" : "false") << '}';
+        << "\",\"port\":" << broker.port
+        << ",\"self\":" << (broker.id == config_.broker_id ? "true" : "false") << '}';
   }
   out << "],\"topics\":[";
 
@@ -591,15 +595,14 @@ std::string Broker::BuildTopologyJson() const {
   for (const auto& descriptor : cluster_.ListTopics()) {
     if (!first) out << ',';
     first = false;
-    out << "{\"name\":\"" << JsonEscape(descriptor.config.name)
-        << "\",\"partitions\":[";
+    out << "{\"name\":\"" << JsonEscape(descriptor.config.name) << "\",\"partitions\":[";
     bool first_partition = true;
     for (const auto& assignment : descriptor.partitions) {
       if (!first_partition) out << ',';
       first_partition = false;
       out << "{\"index\":" << assignment.index.value()
-          << ",\"leader\":" << assignment.leader.value()
-          << ",\"epoch\":" << assignment.leader_epoch << ",\"replicas\":[";
+          << ",\"leader\":" << assignment.leader.value() << ",\"epoch\":" << assignment.leader_epoch
+          << ",\"replicas\":[";
       for (std::size_t i = 0; i < assignment.replicas.size(); ++i) {
         if (i > 0) out << ',';
         out << assignment.replicas[i].value();
@@ -630,8 +633,8 @@ std::string Broker::BuildTopologyJson() const {
     for (const auto& follower : replicator_->DescribeFollowers()) {
       if (!first) out << ',';
       first = false;
-      out << "{\"broker\":" << follower.broker.value() << ",\"connected\":"
-          << (follower.connected ? "true" : "false")
+      out << "{\"broker\":" << follower.broker.value()
+          << ",\"connected\":" << (follower.connected ? "true" : "false")
           << ",\"batches_sent\":" << follower.batches_sent
           << ",\"max_lag_records\":" << follower.max_lag_records << '}';
     }

@@ -51,9 +51,9 @@ struct GroupMember {
 };
 
 enum class GroupState : std::uint8_t {
-  kEmpty,       // No members.
-  kRebalancing, // Membership changed; assignments are being recomputed.
-  kStable,      // Every member has an assignment for the current generation.
+  kEmpty,        // No members.
+  kRebalancing,  // Membership changed; assignments are being recomputed.
+  kStable,       // Every member has an assignment for the current generation.
 };
 
 [[nodiscard]] std::string_view GroupStateName(GroupState state) noexcept;
@@ -73,7 +73,8 @@ using PartitionLookup = std::function<std::vector<TopicPartition>(const std::vec
 
 class GroupCoordinator {
  public:
-  GroupCoordinator(std::unique_ptr<OffsetStore> offsets, PartitionLookup lookup,
+  GroupCoordinator(std::unique_ptr<OffsetStore> offsets,
+                   PartitionLookup lookup,
                    std::int64_t default_session_timeout_ms);
 
   GroupCoordinator(const GroupCoordinator&) = delete;

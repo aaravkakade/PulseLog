@@ -47,9 +47,9 @@ struct FlushPolicy {
 struct LogOptions {
   std::filesystem::path directory;
   std::int64_t segment_bytes = 128LL * 1024 * 1024;
-  std::int64_t segment_ms = -1;             // Roll by age; -1 disables.
+  std::int64_t segment_ms = -1;  // Roll by age; -1 disables.
   std::int64_t index_interval_bytes = 4096;
-  std::int64_t retention_bytes = -1;        // -1 = keep everything.
+  std::int64_t retention_bytes = -1;  // -1 = keep everything.
   std::int64_t retention_ms = -1;
   std::int64_t min_free_disk_bytes = 64LL * 1024 * 1024;
   bool preallocate = true;
@@ -99,8 +99,7 @@ class PartitionLog {
   // Opens the log in `options.directory`, recovering any existing segments.
   // Reports what recovery did through `recovery_out` when provided.
   [[nodiscard]] static Result<std::unique_ptr<PartitionLog>> Open(
-      TopicPartition topic_partition, LogOptions options,
-      RecoveryReport* recovery_out = nullptr);
+      TopicPartition topic_partition, LogOptions options, RecoveryReport* recovery_out = nullptr);
 
   // --- writer thread --------------------------------------------------------
 
@@ -116,7 +115,8 @@ class PartitionLog {
   // Follower path. `records` already carry their final offsets; the first must
   // equal the log end offset. Every record's checksum is verified before it is
   // written, because these bytes came from another machine.
-  [[nodiscard]] Result<AppendResult> AppendWithOffsets(ByteSpan records, std::uint32_t record_count);
+  [[nodiscard]] Result<AppendResult> AppendWithOffsets(ByteSpan records,
+                                                       std::uint32_t record_count);
 
   // Appends several independent buffers with one writev(2). Used by the
   // broker's request-coalescing path. Each chunk must already carry correct
@@ -137,7 +137,8 @@ class PartitionLog {
 
   // --- any thread -----------------------------------------------------------
 
-  [[nodiscard]] Result<LogReadResult> Read(Offset from, std::size_t max_bytes,
+  [[nodiscard]] Result<LogReadResult> Read(Offset from,
+                                           std::size_t max_bytes,
                                            ByteBuffer& out) const;
 
   // fsyncs everything not yet durable and advances `flushed_offset`.

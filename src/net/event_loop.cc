@@ -1,10 +1,10 @@
 #include "pulselog/net/event_loop.h"
 
-#include <fcntl.h>
-#include <unistd.h>
-
 #include <algorithm>
 #include <cerrno>
+
+#include <fcntl.h>
+#include <unistd.h>
 
 #if defined(__linux__)
 #include <sys/eventfd.h>
@@ -21,8 +21,7 @@ constexpr std::string_view kComponent = "net.loop";
 // the same dispatch path as everything else.
 class WakeupHandler final : public EventHandler {
  public:
-  WakeupHandler(int fd, std::function<void()> on_wake)
-      : fd_(fd), on_wake_(std::move(on_wake)) {}
+  WakeupHandler(int fd, std::function<void()> on_wake) : fd_(fd), on_wake_(std::move(on_wake)) {}
 
   void OnReadable() override { on_wake_(); }
 
@@ -97,7 +96,9 @@ Status EventLoop::AddHandler(std::unique_ptr<EventHandler> handler, EventMask ev
   return OkStatus();
 }
 
-Status EventLoop::UpdateEvents(int fd, EventMask events) { return poller_->Modify(fd, events); }
+Status EventLoop::UpdateEvents(int fd, EventMask events) {
+  return poller_->Modify(fd, events);
+}
 
 void EventLoop::CloseHandler(int fd) {
   if (fd < 0 || static_cast<std::size_t>(fd) >= handlers_.size()) return;
@@ -217,9 +218,9 @@ void EventLoop::RunTimers() {
     timer.next_fire_ms = now + timer.interval_ms;
   }
   if (std::any_of(timers_.begin(), timers_.end(), [](const Timer& t) { return t.cancelled; })) {
-    timers_.erase(std::remove_if(timers_.begin(), timers_.end(),
-                                 [](const Timer& t) { return t.cancelled; }),
-                  timers_.end());
+    timers_.erase(
+        std::remove_if(timers_.begin(), timers_.end(), [](const Timer& t) { return t.cancelled; }),
+        timers_.end());
   }
 }
 

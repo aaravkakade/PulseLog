@@ -22,11 +22,14 @@ constexpr std::int64_t kLivenessProbeIntervalMs = 200;
 
 }  // namespace
 
-Replicator::Replicator(ReplicatorOptions options, broker::PartitionManager& partitions,
+Replicator::Replicator(ReplicatorOptions options,
+                       broker::PartitionManager& partitions,
                        metadata::ClusterMetadata& cluster)
     : options_(options), partitions_(partitions), cluster_(cluster) {}
 
-Replicator::~Replicator() { Stop(); }
+Replicator::~Replicator() {
+  Stop();
+}
 
 Status Replicator::Start() {
   if (running_.exchange(true, std::memory_order_acq_rel)) return OkStatus();
@@ -91,7 +94,9 @@ Replicator::Sender::Sender(BrokerId peer, Replicator& parent) : peer_(peer), par
   backoff_ms_ = parent.options_.reconnect_backoff_ms;
 }
 
-Replicator::Sender::~Sender() { Stop(); }
+Replicator::Sender::~Sender() {
+  Stop();
+}
 
 void Replicator::Sender::Start() {
   thread_ = NamedThread("pl-repl-" + std::to_string(peer_.value()), [this] { Run(); });
@@ -121,8 +126,7 @@ Status Replicator::Sender::EnsureConnected() {
     return NotFound("broker " + std::to_string(peer_.value()) + " is not in the cluster config");
   }
 
-  const Status status =
-      client_.Connect(net::Endpoint{endpoint->host, endpoint->port});
+  const Status status = client_.Connect(net::Endpoint{endpoint->host, endpoint->port});
   if (!status.ok()) {
     connected_ = false;
     return status;
@@ -169,8 +173,7 @@ Result<std::size_t> Replicator::Sender::SendPending() {
       PL_WARN(kComponent) << "follower is behind the log start; skipping deleted records"
                           << " peer=" << peer_.value()
                           << " partition=" << replica->topic_partition().ToString()
-                          << " follower_offset=" << follower_offset
-                          << " log_start=" << log_start;
+                          << " follower_offset=" << follower_offset << " log_start=" << log_start;
       follower_offset = log_start;
     }
     worst_lag = std::max(worst_lag, log_end - follower_offset);
@@ -222,8 +225,8 @@ Result<std::size_t> Replicator::Sender::SendPending() {
     protocol::PayloadWriter writer(scratch_);
     request.Encode(writer);
 
-    auto response_frame = client_.Call(protocol::OpCode::kReplicate, next_request_id_++,
-                                       scratch_.Readable());
+    auto response_frame =
+        client_.Call(protocol::OpCode::kReplicate, next_request_id_++, scratch_.Readable());
     if (!response_frame.ok()) {
       connected_ = false;
       parent_.send_failures_.fetch_add(1, std::memory_order_relaxed);
@@ -249,8 +252,8 @@ Result<std::size_t> Replicator::Sender::SendPending() {
                             << " partition=" << replica->topic_partition().ToString()
                             << " sent_base=" << request.base_offset
                             << " follower_end=" << response.log_end_offset;
-        (void)replica->OnFollowerProgress(peer_, response.log_end_offset,
-                                          response.flushed_offset, now_ms);
+        (void)replica->OnFollowerProgress(
+            peer_, response.log_end_offset, response.flushed_offset, now_ms);
         continue;
       }
       if (response.header.error == ErrorCode::kNotLeader) {
@@ -272,8 +275,8 @@ Result<std::size_t> Replicator::Sender::SendPending() {
 
     // Progress advances the high-water mark and can satisfy quorum
     // acknowledgements immediately.
-    (void)replica->OnFollowerProgress(peer_, response.log_end_offset, response.flushed_offset,
-                                      now_ms);
+    (void)replica->OnFollowerProgress(
+        peer_, response.log_end_offset, response.flushed_offset, now_ms);
 
     last_success_ms_.store(now_ms, std::memory_order_relaxed);
     if (record_count == 0) continue;  // A probe is not a batch.
@@ -307,8 +310,9 @@ void Replicator::Sender::Run() {
       PL_DEBUG(kComponent) << "cannot reach follower peer=" << peer_.value()
                            << " retry_ms=" << backoff_ms_ << " error=" << connect.ToString();
       std::unique_lock<std::mutex> lock(mutex_);
-      cv_.wait_for(lock, std::chrono::milliseconds(backoff_ms_),
-                   [this] { return stopping_.load(std::memory_order_acquire); });
+      cv_.wait_for(lock, std::chrono::milliseconds(backoff_ms_), [this] {
+        return stopping_.load(std::memory_order_acquire);
+      });
       backoff_ms_ = std::min(backoff_ms_ * 2, parent_.options_.reconnect_backoff_max_ms);
       continue;
     }

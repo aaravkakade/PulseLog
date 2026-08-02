@@ -12,7 +12,8 @@ constexpr std::string_view kComponent = "broker.partition";
 }  // namespace
 
 PartitionReplica::PartitionReplica(TopicPartition topic_partition,
-                                   metadata::PartitionAssignment assignment, BrokerId self,
+                                   metadata::PartitionAssignment assignment,
+                                   BrokerId self,
                                    std::unique_ptr<storage::PartitionLog> log)
     : topic_partition_(std::move(topic_partition)),
       self_(self),
@@ -108,8 +109,10 @@ void PartitionReplica::OnLeaderAppend(Offset new_log_end_offset, std::int64_t no
   for (auto& waiter : satisfied) waiter.on_complete(OkStatus(), watermark);
 }
 
-Offset PartitionReplica::OnFollowerProgress(BrokerId follower, Offset log_end_offset,
-                                            Offset flushed_offset, std::int64_t now_ms) {
+Offset PartitionReplica::OnFollowerProgress(BrokerId follower,
+                                            Offset log_end_offset,
+                                            Offset flushed_offset,
+                                            std::int64_t now_ms) {
   std::vector<DurabilityWaiter> satisfied;
   Offset watermark = 0;
   {
@@ -220,9 +223,10 @@ void PartitionReplica::ExtractSatisfiedLocked(std::vector<DurabilityWaiter>& out
   };
 
   (void)now_ms;
-  auto partition_point = std::stable_partition(
-      waiters_.begin(), waiters_.end(),
-      [&](const DurabilityWaiter& waiter) { return !satisfied(waiter); });
+  auto partition_point =
+      std::stable_partition(waiters_.begin(), waiters_.end(), [&](const DurabilityWaiter& waiter) {
+        return !satisfied(waiter);
+      });
 
   out.reserve(out.size() + static_cast<std::size_t>(waiters_.end() - partition_point));
   for (auto it = partition_point; it != waiters_.end(); ++it) {
@@ -261,8 +265,9 @@ std::size_t PartitionReplica::ExpireWaiters(std::int64_t now_ms) {
   {
     std::lock_guard<std::mutex> lock(mutex_);
     auto partition_point = std::stable_partition(
-        waiters_.begin(), waiters_.end(),
-        [now_ms](const DurabilityWaiter& waiter) { return waiter.deadline_ms > now_ms; });
+        waiters_.begin(), waiters_.end(), [now_ms](const DurabilityWaiter& waiter) {
+          return waiter.deadline_ms > now_ms;
+        });
     for (auto it = partition_point; it != waiters_.end(); ++it) expired.push_back(std::move(*it));
     waiters_.erase(partition_point, waiters_.end());
   }

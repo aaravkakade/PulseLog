@@ -82,7 +82,8 @@ class Broker final : public RequestExecutor {
 
   // Copies the payload and routes to the owning worker. Answers the client
   // directly with BACKPRESSURE when that worker's queue is full.
-  void RouteToWorker(net::Connection& connection, const protocol::FrameDecoder::Frame& frame,
+  void RouteToWorker(net::Connection& connection,
+                     const protocol::FrameDecoder::Frame& frame,
                      std::size_t worker_index);
 
   // Which worker owns the partition addressed by this request, or nullopt when
@@ -109,11 +110,18 @@ class Broker final : public RequestExecutor {
 
   // Sends a response frame back on the connection that made the request, by
   // posting onto that connection's io loop. Safe if the connection is gone.
-  void Respond(std::size_t loop_index, std::uint64_t connection_id, protocol::OpCode opcode,
-               RequestId request_id, ByteBuffer&& payload);
+  void Respond(std::size_t loop_index,
+               std::uint64_t connection_id,
+               protocol::OpCode opcode,
+               RequestId request_id,
+               ByteBuffer&& payload);
 
-  void RespondError(std::size_t loop_index, std::uint64_t connection_id, protocol::OpCode opcode,
-                    RequestId request_id, ErrorCode code, std::string_view message);
+  void RespondError(std::size_t loop_index,
+                    std::uint64_t connection_id,
+                    protocol::OpCode opcode,
+                    RequestId request_id,
+                    ErrorCode code,
+                    std::string_view message);
 
   // Finds or auto-creates the partition a request addresses.
   [[nodiscard]] Result<PartitionReplica*> ResolvePartition(const std::string& topic,

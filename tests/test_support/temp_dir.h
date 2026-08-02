@@ -2,8 +2,6 @@
 #ifndef PULSELOG_TESTS_TEST_SUPPORT_TEMP_DIR_H_
 #define PULSELOG_TESTS_TEST_SUPPORT_TEMP_DIR_H_
 
-#include <unistd.h>
-
 #include <cstdint>
 #include <cstdlib>
 #include <filesystem>
@@ -14,6 +12,8 @@
 #include <system_error>
 #include <vector>
 
+#include <unistd.h>
+
 namespace pulselog::testing {
 
 // Creates a uniquely named directory under the system temp location and
@@ -21,8 +21,7 @@ namespace pulselog::testing {
 class TempDir {
  public:
   explicit TempDir(const std::string& prefix = "pulselog-test") {
-    std::filesystem::path templ =
-        std::filesystem::temp_directory_path() / (prefix + "-XXXXXX");
+    std::filesystem::path templ = std::filesystem::temp_directory_path() / (prefix + "-XXXXXX");
     std::string buffer = templ.string();
     const char* created = ::mkdtemp(buffer.data());
     if (created == nullptr) {
@@ -43,9 +42,7 @@ class TempDir {
 
   [[nodiscard]] std::string str() const { return path_.string(); }
 
-  [[nodiscard]] std::filesystem::path Child(const std::string& name) const {
-    return path_ / name;
-  }
+  [[nodiscard]] std::filesystem::path Child(const std::string& name) const { return path_ / name; }
 
  private:
   std::filesystem::path path_;
@@ -88,8 +85,10 @@ inline std::vector<std::uint8_t> ReadFileBytes(const std::filesystem::path& path
 }
 
 // Overwrites `count` bytes at `offset` with `value`. Used by corruption tests.
-inline bool CorruptFileAt(const std::filesystem::path& path, std::uint64_t offset,
-                          std::size_t count, std::uint8_t value) {
+inline bool CorruptFileAt(const std::filesystem::path& path,
+                          std::uint64_t offset,
+                          std::size_t count,
+                          std::uint8_t value) {
   std::fstream file(path, std::ios::binary | std::ios::in | std::ios::out);
   if (!file) return false;
   file.seekp(static_cast<std::streamoff>(offset));

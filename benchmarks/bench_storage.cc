@@ -3,15 +3,14 @@
 // The write-mode comparison here is what selects the default in
 // docs/STORAGE_ENGINE.md. It runs against a real temporary directory on the
 // real filesystem, because the whole point is to measure the filesystem.
-#include <benchmark/benchmark.h>
-
-#include <unistd.h>
-
 #include <cstdlib>
 #include <filesystem>
 #include <random>
 #include <string>
 #include <vector>
+
+#include <benchmark/benchmark.h>
+#include <unistd.h>
 
 #include "pulselog/base/buffer.h"
 #include "pulselog/protocol/record.h"
@@ -25,8 +24,7 @@ using namespace pulselog;
 class TempDirectory {
  public:
   TempDirectory() {
-    std::string templ = (std::filesystem::temp_directory_path() / "pulselog-bench-XXXXXX")
-                            .string();
+    std::string templ = (std::filesystem::temp_directory_path() / "pulselog-bench-XXXXXX").string();
     const char* created = ::mkdtemp(templ.data());
     path_ = created != nullptr ? created : templ;
   }
@@ -45,7 +43,8 @@ class TempDirectory {
   std::filesystem::path path_;
 };
 
-storage::LogOptions MakeOptions(const std::filesystem::path& dir, storage::WriteMode mode,
+storage::LogOptions MakeOptions(const std::filesystem::path& dir,
+                                storage::WriteMode mode,
                                 bool sync_on_append) {
   storage::LogOptions options;
   options.directory = dir;
@@ -66,8 +65,7 @@ ByteBuffer MakeBatch(int count, std::size_t value_size) {
   const std::string key = "k";
   const std::string value(value_size, 'v');
   for (int i = 0; i < count; ++i) {
-    protocol::AppendRecord(buffer, 0, 1'700'000'000'000, 0, false, AsBytes(key),
-                           AsBytes(value));
+    protocol::AppendRecord(buffer, 0, 1'700'000'000'000, 0, false, AsBytes(key), AsBytes(value));
   }
   return buffer;
 }
@@ -128,7 +126,8 @@ void BM_LogAppendSynchronous(benchmark::State& state) {
   const int batch = static_cast<int>(state.range(0));
   TempDirectory dir;
   auto log = storage::PartitionLog::Open(TopicPartition{"bench", PartitionIndex{0}},
-                                         MakeOptions(dir.path(), storage::WriteMode::kWrite,
+                                         MakeOptions(dir.path(),
+                                                     storage::WriteMode::kWrite,
                                                      /*sync_on_append=*/true));
   if (!log.ok()) {
     state.SkipWithError(log.status().ToString().c_str());
@@ -146,6 +145,7 @@ void BM_LogAppendSynchronous(benchmark::State& state) {
   state.SetItemsProcessed(state.iterations() * batch);
   state.SetLabel("fsync per append (F_FULLFSYNC on macOS)");
 }
+
 BENCHMARK(BM_LogAppendSynchronous)->Arg(1)->Arg(100)->Unit(benchmark::kMicrosecond);
 
 // --- read path --------------------------------------------------------------
@@ -154,9 +154,9 @@ void BM_LogRead(benchmark::State& state) {
   const std::size_t max_bytes = static_cast<std::size_t>(state.range(0));
 
   TempDirectory dir;
-  auto log = storage::PartitionLog::Open(TopicPartition{"bench", PartitionIndex{0}},
-                                         MakeOptions(dir.path(), storage::WriteMode::kWrite,
-                                                     false));
+  auto log =
+      storage::PartitionLog::Open(TopicPartition{"bench", PartitionIndex{0}},
+                                  MakeOptions(dir.path(), storage::WriteMode::kWrite, false));
   if (!log.ok()) {
     state.SkipWithError(log.status().ToString().c_str());
     return;
@@ -186,6 +186,7 @@ void BM_LogRead(benchmark::State& state) {
   }
   state.SetBytesProcessed(state.iterations() * static_cast<std::int64_t>(max_bytes));
 }
+
 BENCHMARK(BM_LogRead)->Arg(4096)->Arg(65536)->Arg(1 << 20)->Unit(benchmark::kMicrosecond);
 
 // --- offset lookup ----------------------------------------------------------
@@ -221,6 +222,7 @@ void BM_OffsetLookup(benchmark::State& state) {
   }
   state.SetLabel("index interval " + std::to_string(state.range(0)) + " B");
 }
+
 BENCHMARK(BM_OffsetLookup)->Arg(1024)->Arg(4096)->Arg(65536)->Unit(benchmark::kMicrosecond);
 
 }  // namespace

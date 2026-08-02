@@ -163,9 +163,9 @@ Status PartitionLog::MaybeRoll(std::size_t incoming_bytes) {
   if (active == nullptr) return Internal("partition log has no active segment");
 
   const std::uint64_t size = active->SizeBytes();
-  const bool by_size =
-      options_.segment_bytes > 0 &&
-      static_cast<std::int64_t>(size + incoming_bytes) > options_.segment_bytes && size > 0;
+  const bool by_size = options_.segment_bytes > 0 &&
+                       static_cast<std::int64_t>(size + incoming_bytes) > options_.segment_bytes &&
+                       size > 0;
   const bool by_age = options_.segment_ms > 0 && size > 0 &&
                       (WallClockMillis() - active->CreatedAtMs()) >= options_.segment_ms;
   // Segment positions are 32-bit in the index, so a segment can never exceed
@@ -280,8 +280,7 @@ Result<AppendResult> PartitionLog::AppendAssigningOffsets(MutableByteSpan record
   return result;
 }
 
-Result<AppendResult> PartitionLog::AppendWithOffsets(ByteSpan records,
-                                                     std::uint32_t record_count) {
+Result<AppendResult> PartitionLog::AppendWithOffsets(ByteSpan records, std::uint32_t record_count) {
   if (closed_.load(std::memory_order_acquire)) return Status{ErrorCode::kClosed, "log is closed"};
   if (records.empty() || record_count == 0) return InvalidArgument("append with no records");
   PL_RETURN_IF_ERROR(CheckDiskSpace());
@@ -364,8 +363,7 @@ Result<AppendResult> PartitionLog::AppendVectoredWithOffsets(std::span<const Byt
                            " records but contains " + std::to_string(seen));
   }
 
-  PL_RETURN_IF_ERROR(
-      active->AppendEncodedVectored(chunks, base, offset - 1, seen, max_timestamp));
+  PL_RETURN_IF_ERROR(active->AppendEncodedVectored(chunks, base, offset - 1, seen, max_timestamp));
 
   AppendResult result;
   result.base_offset = base;
@@ -380,7 +378,9 @@ Result<AppendResult> PartitionLog::AppendVectoredWithOffsets(std::span<const Byt
 Segment* PartitionLog::SegmentForOffsetLocked(Offset offset) const {
   if (segments_.empty()) return nullptr;
   // Largest segment whose base_offset <= offset.
-  auto it = std::upper_bound(segments_.begin(), segments_.end(), offset,
+  auto it = std::upper_bound(segments_.begin(),
+                             segments_.end(),
+                             offset,
                              [](Offset value, const std::unique_ptr<Segment>& segment) {
                                return value < segment->base_offset();
                              });
@@ -388,7 +388,8 @@ Segment* PartitionLog::SegmentForOffsetLocked(Offset offset) const {
   return (it - 1)->get();
 }
 
-Result<LogReadResult> PartitionLog::Read(Offset from, std::size_t max_bytes,
+Result<LogReadResult> PartitionLog::Read(Offset from,
+                                         std::size_t max_bytes,
                                          ByteBuffer& out) const {
   LogReadResult result;
   result.log_start_offset = log_start_offset_.load(std::memory_order_acquire);
@@ -396,7 +397,8 @@ Result<LogReadResult> PartitionLog::Read(Offset from, std::size_t max_bytes,
   result.base_offset = from;
 
   if (from < result.log_start_offset) {
-    return OutOfRange("offset " + std::to_string(from) + " was deleted by retention (log starts at " +
+    return OutOfRange("offset " + std::to_string(from) +
+                      " was deleted by retention (log starts at " +
                       std::to_string(result.log_start_offset) + ")");
   }
   if (from > result.log_end_offset) {
@@ -457,8 +459,7 @@ bool PartitionLog::NeedsFlush(std::int64_t now_ms) const {
     return true;
   }
   const std::int64_t records = unflushed_records_.load(std::memory_order_relaxed);
-  if (options_.flush.max_unflushed_records > 0 &&
-      records >= options_.flush.max_unflushed_records) {
+  if (options_.flush.max_unflushed_records > 0 && records >= options_.flush.max_unflushed_records) {
     return true;
   }
   if (options_.flush.interval_ms > 0 &&
@@ -493,9 +494,8 @@ Status PartitionLog::Flush() {
   flush_count_.fetch_add(1, std::memory_order_relaxed);
   flush_nanos_total_.fetch_add(elapsed, std::memory_order_relaxed);
   std::uint64_t previous_max = flush_nanos_max_.load(std::memory_order_relaxed);
-  while (elapsed > previous_max &&
-         !flush_nanos_max_.compare_exchange_weak(previous_max, elapsed,
-                                                 std::memory_order_relaxed)) {
+  while (elapsed > previous_max && !flush_nanos_max_.compare_exchange_weak(
+                                       previous_max, elapsed, std::memory_order_relaxed)) {
   }
   return OkStatus();
 }
@@ -550,8 +550,8 @@ Result<std::size_t> PartitionLog::EnforceRetention() {
     Segment* oldest = segments_.front().get();
     const bool too_old = options_.retention_ms > 0 && oldest->MaxTimestamp() > 0 &&
                          (now - oldest->MaxTimestamp()) > options_.retention_ms;
-    const bool too_big = options_.retention_bytes > 0 &&
-                         static_cast<std::int64_t>(total) > options_.retention_bytes;
+    const bool too_big =
+        options_.retention_bytes > 0 && static_cast<std::int64_t>(total) > options_.retention_bytes;
     if (!too_old && !too_big) break;
 
     auto segment = std::move(segments_.front());

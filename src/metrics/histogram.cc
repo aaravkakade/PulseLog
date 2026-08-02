@@ -57,17 +57,16 @@ std::size_t Histogram::IndexFor(std::int64_t value) const noexcept {
   // The low half of every bucket above zero repeats the previous bucket, so
   // only the high half is stored; subtracting sub_bucket_half_count_ lands in
   // the right slot for both cases.
-  const std::int32_t bucket_base_index =
-      (bucket_index + 1) << sub_bucket_half_count_magnitude_;
+  const std::int32_t bucket_base_index = (bucket_index + 1) << sub_bucket_half_count_magnitude_;
   const std::int32_t offset_in_bucket = sub_bucket_index - sub_bucket_half_count_;
   const auto index = static_cast<std::size_t>(bucket_base_index + offset_in_bucket);
   return index < counts_len_ ? index : counts_len_ - 1;
 }
 
 std::int64_t Histogram::ValueForIndex(std::size_t index) const noexcept {
-  auto bucket_index =
-      static_cast<std::int32_t>(index >> static_cast<std::size_t>(sub_bucket_half_count_magnitude_)) -
-      1;
+  auto bucket_index = static_cast<std::int32_t>(
+                          index >> static_cast<std::size_t>(sub_bucket_half_count_magnitude_)) -
+                      1;
   auto sub_bucket_index =
       static_cast<std::int32_t>(index & static_cast<std::size_t>(sub_bucket_half_count_ - 1)) +
       sub_bucket_half_count_;
@@ -78,7 +77,9 @@ std::int64_t Histogram::ValueForIndex(std::size_t index) const noexcept {
   return static_cast<std::int64_t>(sub_bucket_index) << bucket_index;
 }
 
-void Histogram::Record(std::int64_t value) noexcept { RecordMany(value, 1); }
+void Histogram::Record(std::int64_t value) noexcept {
+  RecordMany(value, 1);
+}
 
 void Histogram::RecordMany(std::int64_t value, std::uint64_t count) noexcept {
   if (count == 0) return;
@@ -140,7 +141,9 @@ std::int64_t Histogram::Min() const noexcept {
   return value == INT64_MAX ? 0 : value;
 }
 
-std::int64_t Histogram::Max() const noexcept { return max_.load(std::memory_order_relaxed); }
+std::int64_t Histogram::Max() const noexcept {
+  return max_.load(std::memory_order_relaxed);
+}
 
 double Histogram::Mean() const noexcept {
   const std::uint64_t total = total_count_.load(std::memory_order_relaxed);

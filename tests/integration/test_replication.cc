@@ -1,7 +1,5 @@
 // Multi-broker tests: replication, the high-water mark, quorum
 // acknowledgements, follower failure, leader restart and catch-up.
-#include <gtest/gtest.h>
-
 #include <algorithm>
 #include <chrono>
 #include <set>
@@ -10,6 +8,7 @@
 #include <vector>
 
 #include "test_support/cluster_fixture.h"
+#include <gtest/gtest.h>
 
 namespace pulselog {
 namespace {
@@ -61,8 +60,7 @@ TEST_F(ReplicationTest, LeadershipIsSpreadAcrossBrokers) {
   for (const auto& partition : metadata->topics[0].partitions) {
     leaders.insert(partition.leader.value());
     EXPECT_EQ(partition.replicas.size(), 3U) << "replication factor 3 means 3 replicas";
-    EXPECT_EQ(partition.replicas[0], partition.leader)
-        << "the leader must be the first replica";
+    EXPECT_EQ(partition.replicas[0], partition.leader) << "the leader must be the first replica";
   }
   EXPECT_EQ(leaders.size(), 3U) << "6 partitions over 3 brokers should use all three as leaders";
 }
@@ -238,15 +236,17 @@ TEST_F(ReplicationTest, FollowerCatchesUpAfterRestart) {
 
   client::Producer producer(*context_);
   ASSERT_TRUE(ProduceRecords(producer, "catchup", PartitionIndex{0}, 50).ok());
-  ASSERT_TRUE(WaitUntil([&] { return LocalLogEnd(cluster_->broker(follower), "catchup", 0) == 50; }));
+  ASSERT_TRUE(
+      WaitUntil([&] { return LocalLogEnd(cluster_->broker(follower), "catchup", 0) == 50; }));
 
   // Take the follower down, write while it is away, then bring it back.
   cluster_->StopBroker(follower);
   ASSERT_TRUE(ProduceRecords(producer, "catchup", PartitionIndex{0}, 150, "while-down").ok());
   ASSERT_TRUE(cluster_->StartBroker(follower).ok());
 
-  ASSERT_TRUE(WaitUntil([&] { return LocalLogEnd(cluster_->broker(follower), "catchup", 0) == 200; },
-                        std::chrono::seconds(30)))
+  ASSERT_TRUE(
+      WaitUntil([&] { return LocalLogEnd(cluster_->broker(follower), "catchup", 0) == 200; },
+                std::chrono::seconds(30)))
       << "follower stalled at " << LocalLogEnd(cluster_->broker(follower), "catchup", 0)
       << " of 200";
 
@@ -340,13 +340,12 @@ TEST_F(ReplicationTest, QuorumFailsRatherThanDegradingWhenReplicasAreDown) {
     if (i != leader_id) cluster_->StopBroker(i);
   }
 
-  auto* replica = cluster_->broker(leader_id)
-                      ->partitions()
-                      .Find(TopicPartition{"strict", PartitionIndex{0}});
+  auto* replica =
+      cluster_->broker(leader_id)->partitions().Find(TopicPartition{"strict", PartitionIndex{0}});
   ASSERT_NE(replica, nullptr);
   // Wait for the leader to notice both followers are gone.
-  ASSERT_TRUE(WaitUntil([&] { return replica->GetStats().in_sync_replicas < 2; },
-                        std::chrono::seconds(20)))
+  ASSERT_TRUE(
+      WaitUntil([&] { return replica->GetStats().in_sync_replicas < 2; }, std::chrono::seconds(20)))
       << "leader still believes " << replica->GetStats().in_sync_replicas
       << " replicas are in sync";
 

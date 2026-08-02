@@ -68,11 +68,13 @@ Status OffsetIndex::Append(Offset offset, std::uint64_t position) {
     return InvalidArgument("segment position " + std::to_string(position) +
                            " exceeds the 4 GiB segment limit");
   }
-  if (!entries_.empty() && static_cast<std::uint32_t>(relative) <= entries_.back().relative_offset) {
+  if (!entries_.empty() &&
+      static_cast<std::uint32_t>(relative) <= entries_.back().relative_offset) {
     return InvalidArgument("index entries must strictly increase");
   }
 
-  OffsetIndexEntry entry{static_cast<std::uint32_t>(relative), static_cast<std::uint32_t>(position)};
+  OffsetIndexEntry entry{static_cast<std::uint32_t>(relative),
+                         static_cast<std::uint32_t>(position)};
 
   std::array<std::uint8_t, kIndexEntryBytes> buf{};
   StoreLe<std::uint32_t>(buf.data(), entry.relative_offset);
@@ -89,22 +91,22 @@ std::optional<OffsetIndexEntry> OffsetIndex::LookupFloor(Offset target) const {
   if (relative > static_cast<Offset>(UINT32_MAX)) return entries_.back();
 
   // Largest entry with relative_offset <= relative.
-  const auto it = std::upper_bound(
-      entries_.begin(), entries_.end(), static_cast<std::uint32_t>(relative),
-      [](std::uint32_t value, const OffsetIndexEntry& entry) {
-        return value < entry.relative_offset;
-      });
+  const auto it = std::upper_bound(entries_.begin(),
+                                   entries_.end(),
+                                   static_cast<std::uint32_t>(relative),
+                                   [](std::uint32_t value, const OffsetIndexEntry& entry) {
+                                     return value < entry.relative_offset;
+                                   });
   if (it == entries_.begin()) return std::nullopt;
   return *(it - 1);
 }
 
 Status OffsetIndex::TruncateFrom(Offset offset) {
   const Offset relative = offset - base_offset_;
-  const auto it =
-      std::lower_bound(entries_.begin(), entries_.end(), relative,
-                       [](const OffsetIndexEntry& entry, Offset value) {
-                         return static_cast<Offset>(entry.relative_offset) < value;
-                       });
+  const auto it = std::lower_bound(
+      entries_.begin(), entries_.end(), relative, [](const OffsetIndexEntry& entry, Offset value) {
+        return static_cast<Offset>(entry.relative_offset) < value;
+      });
   const std::size_t keep = static_cast<std::size_t>(it - entries_.begin());
   if (keep == entries_.size()) return OkStatus();
 
@@ -143,8 +145,7 @@ Status TimeIndex::Open(const std::filesystem::path& path, Offset base_offset) {
 
   entries_.reserve(raw.size() / kTimeIndexEntryBytes);
   TimestampMs previous_timestamp = -1;
-  for (std::size_t pos = 0; pos + kTimeIndexEntryBytes <= raw.size();
-       pos += kTimeIndexEntryBytes) {
+  for (std::size_t pos = 0; pos + kTimeIndexEntryBytes <= raw.size(); pos += kTimeIndexEntryBytes) {
     TimeIndexEntry entry;
     entry.timestamp = LoadLeI64(raw.data() + pos);
     entry.relative_offset = LoadLe<std::uint32_t>(raw.data() + pos + 8);
@@ -183,20 +184,21 @@ Status TimeIndex::Append(TimestampMs timestamp, Offset offset) {
 
 std::optional<Offset> TimeIndex::LookupCeiling(TimestampMs timestamp) const {
   if (entries_.empty()) return std::nullopt;
-  const auto it = std::lower_bound(entries_.begin(), entries_.end(), timestamp,
-                                   [](const TimeIndexEntry& entry, TimestampMs value) {
-                                     return entry.timestamp < value;
-                                   });
+  const auto it = std::lower_bound(
+      entries_.begin(),
+      entries_.end(),
+      timestamp,
+      [](const TimeIndexEntry& entry, TimestampMs value) { return entry.timestamp < value; });
   if (it == entries_.end()) return std::nullopt;
   return base_offset_ + static_cast<Offset>(it->relative_offset);
 }
 
 Status TimeIndex::TruncateFrom(Offset offset) {
   const Offset relative = offset - base_offset_;
-  const auto it = std::lower_bound(entries_.begin(), entries_.end(), relative,
-                                   [](const TimeIndexEntry& entry, Offset value) {
-                                     return static_cast<Offset>(entry.relative_offset) < value;
-                                   });
+  const auto it = std::lower_bound(
+      entries_.begin(), entries_.end(), relative, [](const TimeIndexEntry& entry, Offset value) {
+        return static_cast<Offset>(entry.relative_offset) < value;
+      });
   const std::size_t keep = static_cast<std::size_t>(it - entries_.begin());
   if (keep == entries_.size()) return OkStatus();
 

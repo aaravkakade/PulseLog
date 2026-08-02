@@ -31,7 +31,7 @@
 
 namespace pulselog {
 
-template <typename T>
+template<typename T>
 class SpscRing {
  public:
   // `capacity` is rounded up to a power of two so index wrapping is a mask.
@@ -53,7 +53,7 @@ class SpscRing {
 
   // Producer side. Returns false when the ring is full (the caller applies
   // backpressure rather than growing an unbounded queue).
-  template <typename U>
+  template<typename U>
   [[nodiscard]] bool TryPush(U&& value) {
     const std::size_t write = write_index_.load(std::memory_order_relaxed);
     const std::size_t next = (write + 1) & mask_;
@@ -103,7 +103,7 @@ class SpscRing {
   struct Slot {
     alignas(T) std::byte storage[sizeof(T)];
 
-    template <typename U>
+    template<typename U>
     void Construct(U&& value) {
       ::new (static_cast<void*>(storage)) T(std::forward<U>(value));
     }

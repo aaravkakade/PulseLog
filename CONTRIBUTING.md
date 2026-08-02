@@ -33,6 +33,20 @@ scripts/smoke_test.sh
 scripts/failure_test.sh
 ```
 
+## clang-tidy
+
+```bash
+cmake -S . -B build-tidy -DPULSELOG_BUILD_TESTS=OFF -DPULSELOG_BUILD_BENCHMARKS=OFF
+clang-tidy -p build-tidy $(git ls-files 'src/*.cc')
+```
+
+Use the clang-tidy that matches your compiler's standard library. Running
+Homebrew's clang-tidy against Apple's libc++ produces a flood of
+`file not found` errors and — more dangerously — false positives from the
+half-parsed translation unit. It reported four infinite loops that plainly
+update their condition variable on the very next line. CI runs it on Linux
+with a matching toolchain, which is where its output can be trusted.
+
 ## Style
 
 The `.clang-format` and `.clang-tidy` files are the authority. Beyond them:

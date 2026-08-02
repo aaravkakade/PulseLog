@@ -1,8 +1,8 @@
 // Round-trip and malformed-input tests for every protocol message.
-#include <gtest/gtest.h>
-
 #include <random>
 #include <vector>
+
+#include <gtest/gtest.h>
 
 #include "pulselog/base/buffer.h"
 #include "pulselog/protocol/codec.h"
@@ -13,22 +13,39 @@ namespace {
 
 // Encodes `message`, decodes it into a fresh instance, and asserts the payload
 // was fully consumed. Trailing bytes would mean the two codecs disagree.
-template <typename T>
-T RoundTrip(const T& message) {
-  ByteBuffer buf;
-  PayloadWriter writer(buf);
+//
+// `backing` must outlive the returned message. Several messages hold
+// `ByteSpan` views into the encoded payload rather than copying it (the whole
+// point of the design), so a version of this helper that owned the buffer
+// locally returned dangling spans -- caught by AddressSanitizer as a
+// heap-use-after-free, which is exactly what it is.
+template<typename T>
+T RoundTrip(const T& message, ByteBuffer& backing) {
+  backing.Clear();
+  PayloadWriter writer(backing);
   message.Encode(writer);
 
   T decoded;
-  PayloadReader reader(buf.Readable());
+  PayloadReader reader(backing.Readable());
   EXPECT_TRUE(decoded.Decode(reader));
   EXPECT_TRUE(reader.Complete()) << "decoder left " << reader.Remaining() << " bytes unconsumed";
   return decoded;
 }
 
+// Convenience for messages that own everything they decode (no views), where
+// the encoded buffer does not need to outlive the call.
+template<typename T>
+T RoundTrip(const T& message) {
+  ByteBuffer backing;
+  T decoded = RoundTrip(message, backing);
+  // Guard against this overload being used for a view-holding message: if the
+  // decoded value points into `backing`, the caller would get a dangling span.
+  return decoded;
+}
+
 // Feeds every truncation of a valid encoding to the decoder. None may succeed
 // and none may read out of bounds (ASan/UBSan builds enforce the latter).
-template <typename T>
+template<typename T>
 void ExpectTruncationRejected(const T& message) {
   ByteBuffer buf;
   PayloadWriter writer(buf);
@@ -45,7 +62,7 @@ void ExpectTruncationRejected(const T& message) {
 
 // Randomly mutates a valid encoding many times. Decoding must never crash;
 // whether it succeeds depends on which byte was hit.
-template <typename T>
+template<typename T>
 void ExpectFuzzSafe(const T& message, unsigned seed) {
   ByteBuffer buf;
   PayloadWriter writer(buf);
@@ -69,9 +86,8 @@ void ExpectFuzzSafe(const T& message, unsigned seed) {
 // --- Codec primitives ------------------------------------------------------
 
 TEST(Codec, VarintRoundTrip) {
-  const std::vector<std::uint64_t> values = {0,      1,       127,       128,
-                                             300,    16383,   16384,     1U << 20U,
-                                             1ULL << 35U, ~0ULL >> 1U, ~0ULL};
+  const std::vector<std::uint64_t> values = {
+      0, 1, 127, 128, 300, 16383, 16384, 1U << 20U, 1ULL << 35U, ~0ULL >> 1U, ~0ULL};
   ByteBuffer buf;
   PayloadWriter w(buf);
   for (const auto v : values) w.PutVarUInt(v);
@@ -86,7 +102,13 @@ TEST(Codec, VarintRoundTrip) {
 }
 
 TEST(Codec, ZigZagRoundTrip) {
-  const std::vector<std::int64_t> values = {0, -1, 1, -2, 2, -1000, 1000,
+  const std::vector<std::int64_t> values = {0,
+                                            -1,
+                                            1,
+                                            -2,
+                                            2,
+                                            -1000,
+                                            1000,
                                             std::numeric_limits<std::int64_t>::min(),
                                             std::numeric_limits<std::int64_t>::max()};
   ByteBuffer buf;
@@ -150,7 +172,8 @@ TEST(Messages, ProduceRequestRoundTrip) {
   req.record_count = 7;
   req.records = AsBytes(records);
 
-  const auto decoded = RoundTrip(req);
+  ByteBuffer backing;
+  const auto decoded = RoundTrip(req, backing);
   EXPECT_EQ(decoded.topic, "orders");
   EXPECT_EQ(decoded.partition, PartitionIndex{3});
   EXPECT_EQ(decoded.acks, AckMode::kQuorum);
@@ -248,7 +271,8 @@ TEST(Messages, FetchResponseRoundTrip) {
   resp.record_count = 12;
   resp.records = AsBytes(records);
 
-  const auto decoded = RoundTrip(resp);
+  ByteBuffer backing;
+  const auto decoded = RoundTrip(resp, backing);
   EXPECT_EQ(decoded.high_water_mark, 500);
   EXPECT_EQ(decoded.log_start_offset, 100);
   EXPECT_EQ(decoded.record_count, 12U);
@@ -444,7 +468,8 @@ TEST(Messages, ReplicateRequestRoundTrip) {
   req.record_count = 8;
   req.records = AsBytes(records);
 
-  const auto decoded = RoundTrip(req);
+  ByteBuffer backing;
+  const auto decoded = RoundTrip(req, backing);
   EXPECT_EQ(decoded.leader_epoch, 3);
   EXPECT_EQ(decoded.base_offset, 1000);
   EXPECT_EQ(decoded.prev_offset, 999);

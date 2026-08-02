@@ -19,7 +19,8 @@ constexpr std::uint16_t kResponseFlag = static_cast<std::uint16_t>(protocol::Fra
 // Peeks the topic and partition out of a request payload without fully
 // decoding it, so the io thread can pick the owning worker cheaply. Every
 // partition-scoped request begins with `topic string, partition i32`.
-[[nodiscard]] bool PeekTopicPartition(ByteSpan payload, std::string& topic,
+[[nodiscard]] bool PeekTopicPartition(ByteSpan payload,
+                                      std::string& topic,
                                       PartitionIndex& partition) {
   protocol::PayloadReader reader(payload);
   std::int32_t raw = 0;
@@ -30,7 +31,7 @@ constexpr std::uint16_t kResponseFlag = static_cast<std::uint16_t>(protocol::Fra
   return true;
 }
 
-template <typename Response>
+template<typename Response>
 void EncodeInto(ByteBuffer& out, const Response& response) {
   protocol::PayloadWriter writer(out);
   response.Encode(writer);
@@ -63,10 +64,10 @@ void Broker::OnFrame(net::Connection& connection, const protocol::FrameDecoder::
   if (!worker_index.has_value()) {
     if (metrics_) metrics_->protocol_errors.Increment();
     ByteBuffer payload;
-    protocol::EncodeErrorResponse(payload, ErrorCode::kProtocolError,
-                                  "request payload could not be parsed");
-    (void)connection.SendFrame(frame.header.opcode, frame.header.request_id, kResponseFlag,
-                               payload.Readable());
+    protocol::EncodeErrorResponse(
+        payload, ErrorCode::kProtocolError, "request payload could not be parsed");
+    (void)connection.SendFrame(
+        frame.header.opcode, frame.header.request_id, kResponseFlag, payload.Readable());
     return;
   }
   RouteToWorker(connection, frame, *worker_index);
@@ -93,7 +94,8 @@ std::optional<std::size_t> Broker::WorkerForRequest(const protocol::FrameDecoder
 }
 
 void Broker::RouteToWorker(net::Connection& connection,
-                           const protocol::FrameDecoder::Frame& frame, std::size_t worker_index) {
+                           const protocol::FrameDecoder::Frame& frame,
+                           std::size_t worker_index) {
   const std::size_t loop_index = static_cast<std::size_t>(connection.loop().index());
 
   WorkerRequest request;
@@ -121,25 +123,24 @@ void Broker::RouteToWorker(net::Connection& connection,
       metrics_->failed_requests.Increment();
     }
     ByteBuffer payload;
-    protocol::EncodeErrorResponse(payload, ErrorCode::kBackpressure,
-                                  "partition worker queue is full; retry shortly");
-    (void)connection.SendFrame(frame.header.opcode, frame.header.request_id, kResponseFlag,
-                               payload.Readable());
+    protocol::EncodeErrorResponse(
+        payload, ErrorCode::kBackpressure, "partition worker queue is full; retry shortly");
+    (void)connection.SendFrame(
+        frame.header.opcode, frame.header.request_id, kResponseFlag, payload.Readable());
   }
 }
 
-bool Broker::HandleInline(net::Connection& connection,
-                          const protocol::FrameDecoder::Frame& frame) {
+bool Broker::HandleInline(net::Connection& connection, const protocol::FrameDecoder::Frame& frame) {
   ByteBuffer payload;
   const auto send = [&](auto& response) {
     EncodeInto(payload, response);
-    (void)connection.SendFrame(frame.header.opcode, frame.header.request_id, kResponseFlag,
-                               payload.Readable());
+    (void)connection.SendFrame(
+        frame.header.opcode, frame.header.request_id, kResponseFlag, payload.Readable());
   };
   const auto send_error = [&](ErrorCode code, std::string_view message) {
     protocol::EncodeErrorResponse(payload, code, message);
-    (void)connection.SendFrame(frame.header.opcode, frame.header.request_id, kResponseFlag,
-                               payload.Readable());
+    (void)connection.SendFrame(
+        frame.header.opcode, frame.header.request_id, kResponseFlag, payload.Readable());
     if (metrics_) metrics_->failed_requests.Increment();
   };
 
@@ -277,8 +278,11 @@ bool Broker::HandleInline(net::Connection& connection,
 
 // --- responses --------------------------------------------------------------
 
-void Broker::Respond(std::size_t loop_index, std::uint64_t connection_id,
-                     protocol::OpCode opcode, RequestId request_id, ByteBuffer&& payload) {
+void Broker::Respond(std::size_t loop_index,
+                     std::uint64_t connection_id,
+                     protocol::OpCode opcode,
+                     RequestId request_id,
+                     ByteBuffer&& payload) {
   if (server_ == nullptr || loop_index >= loop_connections_.size() ||
       loop_index >= server_->LoopCount()) {
     return;
@@ -302,8 +306,11 @@ void Broker::Respond(std::size_t loop_index, std::uint64_t connection_id,
   }
 }
 
-void Broker::RespondError(std::size_t loop_index, std::uint64_t connection_id,
-                          protocol::OpCode opcode, RequestId request_id, ErrorCode code,
+void Broker::RespondError(std::size_t loop_index,
+                          std::uint64_t connection_id,
+                          protocol::OpCode opcode,
+                          RequestId request_id,
+                          ErrorCode code,
                           std::string_view message) {
   ByteBuffer payload;
   protocol::EncodeErrorResponse(payload, code, message);
@@ -312,7 +319,8 @@ void Broker::RespondError(std::size_t loop_index, std::uint64_t connection_id,
 }
 
 Result<PartitionReplica*> Broker::ResolvePartition(const std::string& topic,
-                                                   PartitionIndex partition, bool auto_create) {
+                                                   PartitionIndex partition,
+                                                   bool auto_create) {
   const TopicPartition topic_partition{topic, partition};
   if (PartitionReplica* replica = partitions_.Find(topic_partition)) return replica;
 
@@ -323,10 +331,10 @@ Result<PartitionReplica*> Broker::ResolvePartition(const std::string& topic,
     if (!IsValidTopicName(topic)) {
       return InvalidArgument("invalid topic name '" + topic + "'");
     }
-    PL_RETURN_IF_ERROR(
-        EnsureTopic(topic, std::max(config_.default_partitions, partition.value() + 1),
-                    config_.default_replication_factor)
-            .status());
+    PL_RETURN_IF_ERROR(EnsureTopic(topic,
+                                   std::max(config_.default_partitions, partition.value() + 1),
+                                   config_.default_replication_factor)
+                           .status());
   }
 
   if (PartitionReplica* replica = partitions_.Find(topic_partition)) return replica;
@@ -374,8 +382,12 @@ void Broker::Execute(WorkerRequest& request) {
       ExecuteDeleteTopic(request);
       break;
     default:
-      RespondError(request.loop_index, request.connection_id, request.opcode, request.request_id,
-                   ErrorCode::kProtocolError, "operation is not valid on a partition worker");
+      RespondError(request.loop_index,
+                   request.connection_id,
+                   request.opcode,
+                   request.request_id,
+                   ErrorCode::kProtocolError,
+                   "operation is not valid on a partition worker");
       break;
   }
 }
@@ -384,8 +396,12 @@ void Broker::ExecuteCreateTopic(WorkerRequest& request) {
   protocol::CreateTopicRequest create;
   protocol::PayloadReader reader(request.payload->Readable());
   if (!create.Decode(reader) || !reader.Complete()) {
-    RespondError(request.loop_index, request.connection_id, request.opcode, request.request_id,
-                 ErrorCode::kProtocolError, "malformed create-topic request");
+    RespondError(request.loop_index,
+                 request.connection_id,
+                 request.opcode,
+                 request.request_id,
+                 ErrorCode::kProtocolError,
+                 "malformed create-topic request");
     return;
   }
 
@@ -407,16 +423,23 @@ void Broker::ExecuteCreateTopic(WorkerRequest& request) {
   ByteBuffer payload;
   protocol::PayloadWriter writer(payload);
   response.Encode(writer);
-  Respond(request.loop_index, request.connection_id, protocol::OpCode::kCreateTopic,
-          request.request_id, std::move(payload));
+  Respond(request.loop_index,
+          request.connection_id,
+          protocol::OpCode::kCreateTopic,
+          request.request_id,
+          std::move(payload));
 }
 
 void Broker::ExecuteDeleteTopic(WorkerRequest& request) {
   protocol::DeleteTopicRequest remove;
   protocol::PayloadReader reader(request.payload->Readable());
   if (!remove.Decode(reader) || !reader.Complete()) {
-    RespondError(request.loop_index, request.connection_id, request.opcode, request.request_id,
-                 ErrorCode::kProtocolError, "malformed delete-topic request");
+    RespondError(request.loop_index,
+                 request.connection_id,
+                 request.opcode,
+                 request.request_id,
+                 ErrorCode::kProtocolError,
+                 "malformed delete-topic request");
     return;
   }
 
@@ -436,8 +459,11 @@ void Broker::ExecuteDeleteTopic(WorkerRequest& request) {
   ByteBuffer payload;
   protocol::PayloadWriter writer(payload);
   response.Encode(writer);
-  Respond(request.loop_index, request.connection_id, protocol::OpCode::kDeleteTopic,
-          request.request_id, std::move(payload));
+  Respond(request.loop_index,
+          request.connection_id,
+          protocol::OpCode::kDeleteTopic,
+          request.request_id,
+          std::move(payload));
 }
 
 void Broker::ExecuteProduce(WorkerRequest& request) {
@@ -447,19 +473,30 @@ void Broker::ExecuteProduce(WorkerRequest& request) {
   protocol::PayloadReader reader(request.payload->Readable());
   if (!produce.Decode(reader)) {
     if (metrics_) metrics_->protocol_errors.Increment();
-    RespondError(request.loop_index, request.connection_id, request.opcode, request.request_id,
-                 ErrorCode::kProtocolError, "malformed produce request");
+    RespondError(request.loop_index,
+                 request.connection_id,
+                 request.opcode,
+                 request.request_id,
+                 ErrorCode::kProtocolError,
+                 "malformed produce request");
     return;
   }
 
   auto replica = ResolvePartition(produce.topic, produce.partition, /*auto_create=*/true);
   if (!replica.ok()) {
-    RespondError(request.loop_index, request.connection_id, request.opcode, request.request_id,
-                 replica.status().code(), replica.status().message());
+    RespondError(request.loop_index,
+                 request.connection_id,
+                 request.opcode,
+                 request.request_id,
+                 replica.status().code(),
+                 replica.status().message());
     return;
   }
   if (!replica.value()->is_leader()) {
-    RespondError(request.loop_index, request.connection_id, request.opcode, request.request_id,
+    RespondError(request.loop_index,
+                 request.connection_id,
+                 request.opcode,
+                 request.request_id,
                  ErrorCode::kNotLeader,
                  "broker " + std::to_string(replica.value()->leader().value()) + " leads " +
                      produce.topic + "-" + std::to_string(produce.partition.value()));
@@ -472,7 +509,10 @@ void Broker::ExecuteProduce(WorkerRequest& request) {
     const auto assignment = replica.value()->assignment();
     const std::size_t in_sync = replica.value()->GetStats().in_sync_replicas;
     if (in_sync < assignment.QuorumSize()) {
-      RespondError(request.loop_index, request.connection_id, request.opcode, request.request_id,
+      RespondError(request.loop_index,
+                   request.connection_id,
+                   request.opcode,
+                   request.request_id,
                    ErrorCode::kNotEnoughReplicas,
                    "quorum requires " + std::to_string(assignment.QuorumSize()) +
                        " in-sync replicas; " + std::to_string(in_sync) + " available");
@@ -486,8 +526,12 @@ void Broker::ExecuteProduce(WorkerRequest& request) {
                                 produce.records.size());
   auto appended = replica.value()->log().AppendAssigningOffsets(records, produce.record_count);
   if (!appended.ok()) {
-    RespondError(request.loop_index, request.connection_id, request.opcode, request.request_id,
-                 appended.status().code(), appended.status().message());
+    RespondError(request.loop_index,
+                 request.connection_id,
+                 request.opcode,
+                 request.request_id,
+                 appended.status().code(),
+                 appended.status().message());
     return;
   }
 
@@ -516,26 +560,27 @@ void Broker::ExecuteProduce(WorkerRequest& request) {
   waiter.mode = produce.acks;
   waiter.deadline_ms =
       now_ms + (produce.timeout_ms > 0 ? produce.timeout_ms : config_.replication_timeout_ms);
-  waiter.on_complete = [this, loop_index, connection_id, request_id, base_offset, last_offset,
-                        append_time, started](Status status, Offset high_water_mark) {
-    protocol::ProduceResponse response;
-    if (!status.ok()) {
-      response.header.error = status.code();
-      response.header.error_message = status.message();
-      if (metrics_) metrics_->failed_requests.Increment();
-    }
-    response.base_offset = base_offset;
-    response.last_offset = last_offset;
-    response.append_time = append_time;
-    response.high_water_mark = high_water_mark;
+  waiter.on_complete =
+      [this, loop_index, connection_id, request_id, base_offset, last_offset, append_time, started](
+          Status status, Offset high_water_mark) {
+        protocol::ProduceResponse response;
+        if (!status.ok()) {
+          response.header.error = status.code();
+          response.header.error_message = status.message();
+          if (metrics_) metrics_->failed_requests.Increment();
+        }
+        response.base_offset = base_offset;
+        response.last_offset = last_offset;
+        response.append_time = append_time;
+        response.high_water_mark = high_water_mark;
 
-    ByteBuffer payload;
-    protocol::PayloadWriter writer(payload);
-    response.Encode(writer);
-    if (metrics_) metrics_->produce_latency.Record(MonotonicNanos() - started);
-    Respond(loop_index, connection_id, protocol::OpCode::kProduce, request_id,
-            std::move(payload));
-  };
+        ByteBuffer payload;
+        protocol::PayloadWriter writer(payload);
+        response.Encode(writer);
+        if (metrics_) metrics_->produce_latency.Record(MonotonicNanos() - started);
+        Respond(
+            loop_index, connection_id, protocol::OpCode::kProduce, request_id, std::move(payload));
+      };
 
   replica.value()->AddWaiter(std::move(waiter), now_ms);
 }
@@ -547,15 +592,23 @@ void Broker::ExecuteFetch(WorkerRequest& request) {
   protocol::PayloadReader reader(request.payload->Readable());
   if (!fetch.Decode(reader) || !reader.Complete()) {
     if (metrics_) metrics_->protocol_errors.Increment();
-    RespondError(request.loop_index, request.connection_id, request.opcode, request.request_id,
-                 ErrorCode::kProtocolError, "malformed fetch request");
+    RespondError(request.loop_index,
+                 request.connection_id,
+                 request.opcode,
+                 request.request_id,
+                 ErrorCode::kProtocolError,
+                 "malformed fetch request");
     return;
   }
 
   auto replica = ResolvePartition(fetch.topic, fetch.partition, /*auto_create=*/false);
   if (!replica.ok()) {
-    RespondError(request.loop_index, request.connection_id, request.opcode, request.request_id,
-                 replica.status().code(), replica.status().message());
+    RespondError(request.loop_index,
+                 request.connection_id,
+                 request.opcode,
+                 request.request_id,
+                 replica.status().code(),
+                 replica.status().message());
     return;
   }
 
@@ -568,15 +621,18 @@ void Broker::ExecuteFetch(WorkerRequest& request) {
   if (start == kEarliestOffset) {
     start = log_start;
   } else if (start == kLatestOffset) {
-    start = fetch.isolation == protocol::IsolationLevel::kReadReplicated ? high_water_mark
-                                                                        : log_end;
+    start =
+        fetch.isolation == protocol::IsolationLevel::kReadReplicated ? high_water_mark : log_end;
   }
 
   // A position outside the log is an error, not an empty result. Returning
   // "nothing available" would leave a consumer polling an offset that can
   // never yield anything -- it needs to know its position is invalid.
   if (start > log_end) {
-    RespondError(request.loop_index, request.connection_id, request.opcode, request.request_id,
+    RespondError(request.loop_index,
+                 request.connection_id,
+                 request.opcode,
+                 request.request_id,
                  ErrorCode::kOutOfRange,
                  "offset " + std::to_string(start) + " is beyond the log end " +
                      std::to_string(log_end) + " for " + fetch.topic + "-" +
@@ -584,11 +640,14 @@ void Broker::ExecuteFetch(WorkerRequest& request) {
     return;
   }
   if (start < log_start) {
-    RespondError(request.loop_index, request.connection_id, request.opcode, request.request_id,
+    RespondError(request.loop_index,
+                 request.connection_id,
+                 request.opcode,
+                 request.request_id,
                  ErrorCode::kOutOfRange,
-                 "offset " + std::to_string(start) + " was deleted by retention; " +
-                     fetch.topic + "-" + std::to_string(fetch.partition.value()) +
-                     " now starts at " + std::to_string(log_start));
+                 "offset " + std::to_string(start) + " was deleted by retention; " + fetch.topic +
+                     "-" + std::to_string(fetch.partition.value()) + " now starts at " +
+                     std::to_string(log_start));
     return;
   }
 
@@ -606,8 +665,12 @@ void Broker::ExecuteFetch(WorkerRequest& request) {
   if (start < visible_end) {
     auto read = replica.value()->log().Read(start, fetch.max_bytes, records);
     if (!read.ok()) {
-      RespondError(request.loop_index, request.connection_id, request.opcode, request.request_id,
-                   read.status().code(), read.status().message());
+      RespondError(request.loop_index,
+                   request.connection_id,
+                   request.opcode,
+                   request.request_id,
+                   read.status().code(),
+                   read.status().message());
       return;
     }
     // Trim anything beyond the visible end. The log may hold records the
@@ -639,7 +702,10 @@ void Broker::ExecuteFetch(WorkerRequest& request) {
   protocol::PayloadWriter writer(payload);
   response.Encode(writer);
   if (metrics_) metrics_->fetch_latency.Record(MonotonicNanos() - started);
-  Respond(request.loop_index, request.connection_id, protocol::OpCode::kFetch, request.request_id,
+  Respond(request.loop_index,
+          request.connection_id,
+          protocol::OpCode::kFetch,
+          request.request_id,
           std::move(payload));
 }
 
@@ -647,15 +713,23 @@ void Broker::ExecuteListOffsets(WorkerRequest& request) {
   protocol::ListOffsetsRequest list;
   protocol::PayloadReader reader(request.payload->Readable());
   if (!list.Decode(reader) || !reader.Complete()) {
-    RespondError(request.loop_index, request.connection_id, request.opcode, request.request_id,
-                 ErrorCode::kProtocolError, "malformed list-offsets request");
+    RespondError(request.loop_index,
+                 request.connection_id,
+                 request.opcode,
+                 request.request_id,
+                 ErrorCode::kProtocolError,
+                 "malformed list-offsets request");
     return;
   }
 
   auto replica = ResolvePartition(list.topic, list.partition, /*auto_create=*/false);
   if (!replica.ok()) {
-    RespondError(request.loop_index, request.connection_id, request.opcode, request.request_id,
-                 replica.status().code(), replica.status().message());
+    RespondError(request.loop_index,
+                 request.connection_id,
+                 request.opcode,
+                 request.request_id,
+                 replica.status().code(),
+                 replica.status().message());
     return;
   }
 
@@ -672,16 +746,23 @@ void Broker::ExecuteListOffsets(WorkerRequest& request) {
   ByteBuffer payload;
   protocol::PayloadWriter writer(payload);
   response.Encode(writer);
-  Respond(request.loop_index, request.connection_id, protocol::OpCode::kListOffsets,
-          request.request_id, std::move(payload));
+  Respond(request.loop_index,
+          request.connection_id,
+          protocol::OpCode::kListOffsets,
+          request.request_id,
+          std::move(payload));
 }
 
 void Broker::ExecuteReplicate(WorkerRequest& request) {
   protocol::ReplicateRequest replicate;
   protocol::PayloadReader reader(request.payload->Readable());
   if (!replicate.Decode(reader)) {
-    RespondError(request.loop_index, request.connection_id, request.opcode, request.request_id,
-                 ErrorCode::kProtocolError, "malformed replicate request");
+    RespondError(request.loop_index,
+                 request.connection_id,
+                 request.opcode,
+                 request.request_id,
+                 ErrorCode::kProtocolError,
+                 "malformed replicate request");
     return;
   }
 
@@ -706,8 +787,11 @@ void Broker::ExecuteReplicate(WorkerRequest& request) {
     ByteBuffer payload;
     protocol::PayloadWriter writer(payload);
     response.Encode(writer);
-    Respond(request.loop_index, request.connection_id, protocol::OpCode::kReplicate,
-            request.request_id, std::move(payload));
+    Respond(request.loop_index,
+            request.connection_id,
+            protocol::OpCode::kReplicate,
+            request.request_id,
+            std::move(payload));
     return;
   }
 
@@ -718,9 +802,8 @@ void Broker::ExecuteReplicate(WorkerRequest& request) {
   // is what stops a partitioned-then-returned leader from overwriting a log.
   if (replicate.leader_epoch < replica->leader_epoch()) {
     response.header.error = ErrorCode::kNotLeader;
-    response.header.error_message = "stale leader epoch " +
-                                    std::to_string(replicate.leader_epoch) + "; current is " +
-                                    std::to_string(replica->leader_epoch());
+    response.header.error_message = "stale leader epoch " + std::to_string(replicate.leader_epoch) +
+                                    "; current is " + std::to_string(replica->leader_epoch());
     response.log_end_offset = log_end;
     response.flushed_offset = replica->log().FlushedOffset();
   } else if (replicate.record_count == 0 && replicate.base_offset == log_end) {
@@ -758,23 +841,34 @@ void Broker::ExecuteReplicate(WorkerRequest& request) {
   ByteBuffer payload;
   protocol::PayloadWriter writer(payload);
   response.Encode(writer);
-  Respond(request.loop_index, request.connection_id, protocol::OpCode::kReplicate,
-          request.request_id, std::move(payload));
+  Respond(request.loop_index,
+          request.connection_id,
+          protocol::OpCode::kReplicate,
+          request.request_id,
+          std::move(payload));
 }
 
 void Broker::ExecuteReplicaFetch(WorkerRequest& request) {
   protocol::ReplicaFetchRequest fetch;
   protocol::PayloadReader reader(request.payload->Readable());
   if (!fetch.Decode(reader) || !reader.Complete()) {
-    RespondError(request.loop_index, request.connection_id, request.opcode, request.request_id,
-                 ErrorCode::kProtocolError, "malformed replica-fetch request");
+    RespondError(request.loop_index,
+                 request.connection_id,
+                 request.opcode,
+                 request.request_id,
+                 ErrorCode::kProtocolError,
+                 "malformed replica-fetch request");
     return;
   }
 
   auto replica = ResolvePartition(fetch.topic, fetch.partition, /*auto_create=*/false);
   if (!replica.ok()) {
-    RespondError(request.loop_index, request.connection_id, request.opcode, request.request_id,
-                 replica.status().code(), replica.status().message());
+    RespondError(request.loop_index,
+                 request.connection_id,
+                 request.opcode,
+                 request.request_id,
+                 replica.status().code(),
+                 replica.status().message());
     return;
   }
 
@@ -790,8 +884,12 @@ void Broker::ExecuteReplicaFetch(WorkerRequest& request) {
   if (fetch.fetch_offset < replica.value()->log().LogEndOffset()) {
     auto read = replica.value()->log().Read(fetch.fetch_offset, fetch.max_bytes, records);
     if (!read.ok()) {
-      RespondError(request.loop_index, request.connection_id, request.opcode, request.request_id,
-                   read.status().code(), read.status().message());
+      RespondError(request.loop_index,
+                   request.connection_id,
+                   request.opcode,
+                   request.request_id,
+                   read.status().code(),
+                   read.status().message());
       return;
     }
     response.record_count = read->record_count;
@@ -801,16 +899,23 @@ void Broker::ExecuteReplicaFetch(WorkerRequest& request) {
   ByteBuffer payload;
   protocol::PayloadWriter writer(payload);
   response.Encode(writer);
-  Respond(request.loop_index, request.connection_id, protocol::OpCode::kReplicaFetch,
-          request.request_id, std::move(payload));
+  Respond(request.loop_index,
+          request.connection_id,
+          protocol::OpCode::kReplicaFetch,
+          request.request_id,
+          std::move(payload));
 }
 
 void Broker::ExecuteReplicaAck(WorkerRequest& request) {
   protocol::ReplicaAckRequest ack;
   protocol::PayloadReader reader(request.payload->Readable());
   if (!ack.Decode(reader) || !reader.Complete()) {
-    RespondError(request.loop_index, request.connection_id, request.opcode, request.request_id,
-                 ErrorCode::kProtocolError, "malformed replica-ack request");
+    RespondError(request.loop_index,
+                 request.connection_id,
+                 request.opcode,
+                 request.request_id,
+                 ErrorCode::kProtocolError,
+                 "malformed replica-ack request");
     return;
   }
 
@@ -820,15 +925,18 @@ void Broker::ExecuteReplicaAck(WorkerRequest& request) {
     response.header.error = ErrorCode::kNotFound;
     response.header.error_message = "this broker does not host that partition";
   } else {
-    response.high_water_mark = replica->OnFollowerProgress(ack.follower_id, ack.log_end_offset,
-                                                           ack.flushed_offset, WallClockMillis());
+    response.high_water_mark = replica->OnFollowerProgress(
+        ack.follower_id, ack.log_end_offset, ack.flushed_offset, WallClockMillis());
   }
 
   ByteBuffer payload;
   protocol::PayloadWriter writer(payload);
   response.Encode(writer);
-  Respond(request.loop_index, request.connection_id, protocol::OpCode::kReplicaAck,
-          request.request_id, std::move(payload));
+  Respond(request.loop_index,
+          request.connection_id,
+          protocol::OpCode::kReplicaAck,
+          request.request_id,
+          std::move(payload));
 }
 
 }  // namespace pulselog::broker

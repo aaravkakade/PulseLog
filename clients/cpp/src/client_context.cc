@@ -12,7 +12,9 @@ ClientContext::ClientContext(ClientConfig config) : config_(std::move(config)) {
   }
 }
 
-ClientContext::~ClientContext() { CloseAll(); }
+ClientContext::~ClientContext() {
+  CloseAll();
+}
 
 void ClientContext::CloseAll() {
   for (auto& [key, connection] : connections_) connection->Close();
@@ -90,7 +92,9 @@ Status ClientContext::RefreshMetadata(const std::vector<std::string>& topics) {
   return OkStatus();
 }
 
-void ClientContext::InvalidateTopic(const std::string& topic) { topics_.erase(topic); }
+void ClientContext::InvalidateTopic(const std::string& topic) {
+  topics_.erase(topic);
+}
 
 Result<std::int32_t> ClientContext::PartitionCount(const std::string& topic) {
   auto it = topics_.find(topic);
@@ -116,8 +120,7 @@ Result<net::SyncClient*> ClientContext::LeaderFor(const std::string& topic,
 
   const auto index = static_cast<std::size_t>(partition.value());
   if (partition.value() < 0 || index >= it->second.partitions.size()) {
-    return NotFound("topic '" + topic + "' has no partition " +
-                    std::to_string(partition.value()));
+    return NotFound("topic '" + topic + "' has no partition " + std::to_string(partition.value()));
   }
 
   const BrokerId leader = it->second.partitions[index].leader;
@@ -140,7 +143,8 @@ Result<net::SyncClient*> ClientContext::LeaderOrAny(const std::string& topic,
 
 // --- AdminClient ------------------------------------------------------------
 
-Status AdminClient::CreateTopic(const std::string& topic, std::int32_t partitions,
+Status AdminClient::CreateTopic(const std::string& topic,
+                                std::int32_t partitions,
                                 std::int16_t replication_factor) {
   PL_ASSIGN_OR_RETURN(net::SyncClient * connection, context_.AnyBroker());
 
@@ -153,9 +157,10 @@ Status AdminClient::CreateTopic(const std::string& topic, std::int32_t partition
   protocol::PayloadWriter writer(payload);
   request.Encode(writer);
 
-  PL_ASSIGN_OR_RETURN(auto frame,
-                      connection->Call(protocol::OpCode::kCreateTopic,
-                                       context_.NextRequestId(), payload.Readable()));
+  PL_ASSIGN_OR_RETURN(
+      auto frame,
+      connection->Call(
+          protocol::OpCode::kCreateTopic, context_.NextRequestId(), payload.Readable()));
   protocol::CreateTopicResponse response;
   PL_RETURN_IF_ERROR(ClientContext::DecodeResponse(frame.payload, response));
 
@@ -174,9 +179,10 @@ Status AdminClient::DeleteTopic(const std::string& topic) {
   protocol::PayloadWriter writer(payload);
   request.Encode(writer);
 
-  PL_ASSIGN_OR_RETURN(auto frame,
-                      connection->Call(protocol::OpCode::kDeleteTopic,
-                                       context_.NextRequestId(), payload.Readable()));
+  PL_ASSIGN_OR_RETURN(
+      auto frame,
+      connection->Call(
+          protocol::OpCode::kDeleteTopic, context_.NextRequestId(), payload.Readable()));
   protocol::DeleteTopicResponse response;
   PL_RETURN_IF_ERROR(ClientContext::DecodeResponse(frame.payload, response));
   context_.InvalidateTopic(topic);
@@ -193,8 +199,9 @@ Result<protocol::MetadataResponse> AdminClient::GetMetadata(
   protocol::PayloadWriter writer(payload);
   request.Encode(writer);
 
-  PL_ASSIGN_OR_RETURN(auto frame, connection->Call(protocol::OpCode::kMetadata,
-                                                   context_.NextRequestId(), payload.Readable()));
+  PL_ASSIGN_OR_RETURN(
+      auto frame,
+      connection->Call(protocol::OpCode::kMetadata, context_.NextRequestId(), payload.Readable()));
   protocol::MetadataResponse response;
   PL_RETURN_IF_ERROR(ClientContext::DecodeResponse(frame.payload, response));
   return response;
@@ -202,8 +209,9 @@ Result<protocol::MetadataResponse> AdminClient::GetMetadata(
 
 Result<protocol::HealthResponse> AdminClient::Health() {
   PL_ASSIGN_OR_RETURN(net::SyncClient * connection, context_.AnyBroker());
-  PL_ASSIGN_OR_RETURN(auto frame, connection->Call(protocol::OpCode::kHealth,
-                                                   context_.NextRequestId(), ByteSpan{}));
+  PL_ASSIGN_OR_RETURN(
+      auto frame,
+      connection->Call(protocol::OpCode::kHealth, context_.NextRequestId(), ByteSpan{}));
   protocol::HealthResponse response;
   PL_RETURN_IF_ERROR(ClientContext::DecodeResponse(frame.payload, response));
   return response;
@@ -211,8 +219,9 @@ Result<protocol::HealthResponse> AdminClient::Health() {
 
 Result<protocol::ListTopicsResponse> AdminClient::ListTopics() {
   PL_ASSIGN_OR_RETURN(net::SyncClient * connection, context_.AnyBroker());
-  PL_ASSIGN_OR_RETURN(auto frame, connection->Call(protocol::OpCode::kListTopics,
-                                                   context_.NextRequestId(), ByteSpan{}));
+  PL_ASSIGN_OR_RETURN(
+      auto frame,
+      connection->Call(protocol::OpCode::kListTopics, context_.NextRequestId(), ByteSpan{}));
   protocol::ListTopicsResponse response;
   PL_RETURN_IF_ERROR(ClientContext::DecodeResponse(frame.payload, response));
   return response;
@@ -220,8 +229,9 @@ Result<protocol::ListTopicsResponse> AdminClient::ListTopics() {
 
 Result<protocol::DescribeClusterResponse> AdminClient::DescribeCluster() {
   PL_ASSIGN_OR_RETURN(net::SyncClient * connection, context_.AnyBroker());
-  PL_ASSIGN_OR_RETURN(auto frame, connection->Call(protocol::OpCode::kDescribeCluster,
-                                                   context_.NextRequestId(), ByteSpan{}));
+  PL_ASSIGN_OR_RETURN(
+      auto frame,
+      connection->Call(protocol::OpCode::kDescribeCluster, context_.NextRequestId(), ByteSpan{}));
   protocol::DescribeClusterResponse response;
   PL_RETURN_IF_ERROR(ClientContext::DecodeResponse(frame.payload, response));
   return response;

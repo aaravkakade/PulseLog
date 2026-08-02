@@ -33,7 +33,7 @@
 
 namespace pulselog {
 
-template <typename T>
+template<typename T>
 class BoundedMpmcQueue {
  public:
   explicit BoundedMpmcQueue(std::size_t capacity) : mask_(RoundUpPow2(capacity) - 1) {
@@ -52,7 +52,7 @@ class BoundedMpmcQueue {
     }
   }
 
-  template <typename U>
+  template<typename U>
   [[nodiscard]] bool TryPush(U&& value) {
     Cell* cell = nullptr;
     std::size_t pos = enqueue_pos_.load(std::memory_order_relaxed);
@@ -62,8 +62,8 @@ class BoundedMpmcQueue {
       const auto diff = static_cast<std::intptr_t>(seq) - static_cast<std::intptr_t>(pos);
       if (diff == 0) {
         // Cell is free and it is our turn: claim the ticket.
-        if (enqueue_pos_.compare_exchange_weak(pos, pos + 1, std::memory_order_acq_rel,
-                                               std::memory_order_relaxed)) {
+        if (enqueue_pos_.compare_exchange_weak(
+                pos, pos + 1, std::memory_order_acq_rel, std::memory_order_relaxed)) {
           break;
         }
         // CAS failure refreshed `pos`; retry with the new value.
@@ -86,8 +86,8 @@ class BoundedMpmcQueue {
       const std::size_t seq = cell->sequence.load(std::memory_order_acquire);
       const auto diff = static_cast<std::intptr_t>(seq) - static_cast<std::intptr_t>(pos + 1);
       if (diff == 0) {
-        if (dequeue_pos_.compare_exchange_weak(pos, pos + 1, std::memory_order_acq_rel,
-                                               std::memory_order_relaxed)) {
+        if (dequeue_pos_.compare_exchange_weak(
+                pos, pos + 1, std::memory_order_acq_rel, std::memory_order_relaxed)) {
           break;
         }
       } else if (diff < 0) {
@@ -117,7 +117,7 @@ class BoundedMpmcQueue {
     std::atomic<std::size_t> sequence;
     alignas(T) std::byte storage[sizeof(T)];
 
-    template <typename U>
+    template<typename U>
     void Construct(U&& value) {
       ::new (static_cast<void*>(storage)) T(std::forward<U>(value));
     }

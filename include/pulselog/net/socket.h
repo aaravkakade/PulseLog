@@ -58,7 +58,8 @@ class TcpSocket {
 
   // Creates a listening socket bound to `endpoint`. Sets SO_REUSEADDR so a
   // restarting broker does not have to wait out TIME_WAIT.
-  [[nodiscard]] static Result<TcpSocket> Listen(const Endpoint& endpoint, int backlog = 512,
+  [[nodiscard]] static Result<TcpSocket> Listen(const Endpoint& endpoint,
+                                                int backlog = 512,
                                                 bool reuse_port = false);
 
   // Starts a non-blocking connect. Returns a connected socket, or one that is

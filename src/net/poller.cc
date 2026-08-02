@@ -5,11 +5,11 @@
 // would mean two files of which one is always empty.
 #include "pulselog/net/poller.h"
 
-#include <unistd.h>
-
 #include <array>
 #include <cerrno>
 #include <cstring>
+
+#include <unistd.h>
 
 #if defined(__linux__)
 #include <sys/epoll.h>
@@ -146,8 +146,8 @@ class KqueuePoller final : public Poller {
 
     int ready = 0;
     do {
-      ready = ::kevent(kqueue_fd_, nullptr, 0, events_.data(), static_cast<int>(events_.size()),
-                       timeout_ptr);
+      ready = ::kevent(
+          kqueue_fd_, nullptr, 0, events_.data(), static_cast<int>(events_.size()), timeout_ptr);
     } while (ready < 0 && errno == EINTR);
 
     if (ready < 0) return ErrnoToStatus("kevent(wait)", errno);
@@ -201,16 +201,26 @@ class KqueuePoller final : public Poller {
     const bool want_read = HasEvent(desired, EventMask::kRead);
     const bool had_read = HasEvent(previous, EventMask::kRead);
     if (want_read != had_read) {
-      EV_SET(&changes[count], static_cast<uintptr_t>(fd), EVFILT_READ,
-             want_read ? EV_ADD : EV_DELETE, 0, 0, nullptr);
+      EV_SET(&changes[count],
+             static_cast<uintptr_t>(fd),
+             EVFILT_READ,
+             want_read ? EV_ADD : EV_DELETE,
+             0,
+             0,
+             nullptr);
       ++count;
     }
 
     const bool want_write = HasEvent(desired, EventMask::kWrite);
     const bool had_write = HasEvent(previous, EventMask::kWrite);
     if (want_write != had_write) {
-      EV_SET(&changes[count], static_cast<uintptr_t>(fd), EVFILT_WRITE,
-             want_write ? EV_ADD : EV_DELETE, 0, 0, nullptr);
+      EV_SET(&changes[count],
+             static_cast<uintptr_t>(fd),
+             EVFILT_WRITE,
+             want_write ? EV_ADD : EV_DELETE,
+             0,
+             0,
+             nullptr);
       ++count;
     }
 

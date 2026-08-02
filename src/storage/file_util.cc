@@ -1,14 +1,14 @@
 #include "pulselog/storage/file_util.h"
 
+#include <algorithm>
+#include <cerrno>
+#include <system_error>
+
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/statvfs.h>
 #include <unistd.h>
-
-#include <algorithm>
-#include <cerrno>
-#include <system_error>
 
 namespace pulselog::storage {
 namespace {
@@ -71,7 +71,8 @@ bool ParseWriteMode(std::string_view text, WriteMode& out) noexcept {
   return false;
 }
 
-Result<FileHandle> FileHandle::Open(const std::filesystem::path& path, bool create,
+Result<FileHandle> FileHandle::Open(const std::filesystem::path& path,
+                                    bool create,
                                     bool read_only) {
   int flags = read_only ? O_RDONLY : O_RDWR;
   if (create) flags |= O_CREAT;
@@ -160,12 +161,12 @@ Status FileHandle::WriteVectoredAt(std::span<const ByteSpan> chunks, std::uint64
   return OkStatus();
 }
 
-Result<std::size_t> FileHandle::ReadAt(std::uint8_t* dst, std::size_t size,
+Result<std::size_t> FileHandle::ReadAt(std::uint8_t* dst,
+                                       std::size_t size,
                                        std::uint64_t offset) const {
   std::size_t total = 0;
   while (total < size) {
-    const ssize_t got =
-        ::pread(fd_, dst + total, size - total, static_cast<off_t>(offset + total));
+    const ssize_t got = ::pread(fd_, dst + total, size - total, static_cast<off_t>(offset + total));
     if (got < 0) {
       if (errno == EINTR) continue;
       return ErrnoToStatus("pread", errno);
@@ -238,7 +239,7 @@ Status FileHandle::Truncate(std::uint64_t size) const {
 }
 
 Result<std::uint64_t> FileHandle::Size() const {
-  struct ::stat st {};
+  struct ::stat st{};
   if (::fstat(fd_, &st) != 0) {
     return ErrnoToStatus("fstat", errno);
   }
@@ -357,7 +358,7 @@ Result<std::vector<std::filesystem::path>> ListFiles(const std::filesystem::path
 }
 
 Result<std::uint64_t> AvailableBytes(const std::filesystem::path& path) {
-  struct ::statvfs stat {};
+  struct ::statvfs stat{};
   if (::statvfs(path.c_str(), &stat) != 0) {
     return ErrnoToStatus("statvfs " + path.string(), errno);
   }

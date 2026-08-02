@@ -30,7 +30,7 @@ std::vector<std::string> Split(std::string_view text, char delimiter) {
   return parts;
 }
 
-template <typename T>
+template<typename T>
 bool ParseNumber(std::string_view text, T& out) {
   const auto [ptr, ec] = std::from_chars(text.data(), text.data() + text.size(), out);
   return ec == std::errc{} && ptr == text.data() + text.size();
@@ -46,12 +46,14 @@ PartitionIndex PartitionForKey(ByteSpan key, std::int32_t partition_count) noexc
   if (partition_count <= 1) return PartitionIndex{0};
   // Masking the sign bit keeps the modulus non-negative without a branch.
   const std::uint32_t hash = Crc32c(key) & 0x7FFFFFFFU;
-  return PartitionIndex{static_cast<std::int32_t>(hash % static_cast<std::uint32_t>(partition_count))};
+  return PartitionIndex{
+      static_cast<std::int32_t>(hash % static_cast<std::uint32_t>(partition_count))};
 }
 
 PartitionIndex PartitionRoundRobin(std::uint64_t counter, std::int32_t partition_count) noexcept {
   if (partition_count <= 1) return PartitionIndex{0};
-  return PartitionIndex{static_cast<std::int32_t>(counter % static_cast<std::uint64_t>(partition_count))};
+  return PartitionIndex{
+      static_cast<std::int32_t>(counter % static_cast<std::uint64_t>(partition_count))};
 }
 
 Status ClusterMetadata::SetBrokersFromSpec(const std::vector<std::string>& specs) {
@@ -86,8 +88,9 @@ Status ClusterMetadata::SetBrokersFromSpec(const std::vector<std::string>& specs
   }
 
   // Assignment is positional, so every broker must agree on the order.
-  std::sort(brokers.begin(), brokers.end(),
-            [](const BrokerEndpoint& a, const BrokerEndpoint& b) { return a.id < b.id; });
+  std::sort(brokers.begin(), brokers.end(), [](const BrokerEndpoint& a, const BrokerEndpoint& b) {
+    return a.id < b.id;
+  });
   for (std::size_t i = 1; i < brokers.size(); ++i) {
     if (brokers[i].id == brokers[i - 1].id) {
       return InvalidArgument("duplicate broker id " + std::to_string(brokers[i].id.value()));
@@ -110,8 +113,8 @@ std::vector<BrokerEndpoint> ClusterMetadata::Brokers() const {
 
 std::optional<BrokerEndpoint> ClusterMetadata::FindBroker(BrokerId id) const {
   std::shared_lock<std::shared_mutex> lock(mutex_);
-  const auto it = std::find_if(brokers_.begin(), brokers_.end(),
-                               [id](const BrokerEndpoint& b) { return b.id == id; });
+  const auto it = std::find_if(
+      brokers_.begin(), brokers_.end(), [id](const BrokerEndpoint& b) { return b.id == id; });
   if (it == brokers_.end()) return std::nullopt;
   return *it;
 }
@@ -132,8 +135,8 @@ std::vector<PartitionAssignment> ClusterMetadata::ComputeAssignments(
   const std::size_t broker_count = brokers_.size();
   if (broker_count == 0) return assignments;
 
-  const auto replication = std::min<std::size_t>(
-      static_cast<std::size_t>(config.replication_factor), broker_count);
+  const auto replication =
+      std::min<std::size_t>(static_cast<std::size_t>(config.replication_factor), broker_count);
   // Offsetting by a hash of the topic name stops every topic from putting its
   // partition-0 leader on the same broker.
   const std::uint32_t topic_offset = Crc32c(AsBytes(config.name)) % broker_count;
@@ -144,8 +147,7 @@ std::vector<PartitionAssignment> ClusterMetadata::ComputeAssignments(
     assignment.leader_epoch = 0;
     assignment.replicas.reserve(replication);
     for (std::size_t r = 0; r < replication; ++r) {
-      const std::size_t slot =
-          (static_cast<std::size_t>(p) + r + topic_offset) % broker_count;
+      const std::size_t slot = (static_cast<std::size_t>(p) + r + topic_offset) % broker_count;
       assignment.replicas.push_back(brokers_[slot].id);
     }
     assignment.leader = assignment.replicas.front();
@@ -155,8 +157,7 @@ std::vector<PartitionAssignment> ClusterMetadata::ComputeAssignments(
   return assignments;
 }
 
-Result<TopicDescriptor> ClusterMetadata::CreateTopic(const TopicConfig& config,
-                                                     bool* created) {
+Result<TopicDescriptor> ClusterMetadata::CreateTopic(const TopicConfig& config, bool* created) {
   if (created != nullptr) *created = false;
   if (!IsValidTopicName(config.name)) {
     return InvalidArgument("invalid topic name '" + config.name +
@@ -249,8 +250,7 @@ Result<PartitionAssignment> ClusterMetadata::GetPartition(const std::string& top
 
   const auto index = static_cast<std::size_t>(partition.value());
   if (partition.value() < 0 || index >= it->second.partitions.size()) {
-    return NotFound("topic '" + topic + "' has no partition " +
-                    std::to_string(partition.value()));
+    return NotFound("topic '" + topic + "' has no partition " + std::to_string(partition.value()));
   }
   return it->second.partitions[index];
 }
@@ -277,7 +277,8 @@ std::vector<TopicPartition> ClusterMetadata::PartitionsHostedBy(BrokerId broker)
   return result;
 }
 
-Status ClusterMetadata::UpdateInSyncReplicas(const std::string& topic, PartitionIndex partition,
+Status ClusterMetadata::UpdateInSyncReplicas(const std::string& topic,
+                                             PartitionIndex partition,
                                              std::vector<BrokerId> in_sync) {
   std::unique_lock<std::shared_mutex> lock(mutex_);
   const auto it = topics_.find(topic);
@@ -288,7 +289,8 @@ Status ClusterMetadata::UpdateInSyncReplicas(const std::string& topic, Partition
   return OkStatus();
 }
 
-Status ClusterMetadata::SetLeader(const std::string& topic, PartitionIndex partition,
+Status ClusterMetadata::SetLeader(const std::string& topic,
+                                  PartitionIndex partition,
                                   BrokerId leader) {
   std::unique_lock<std::shared_mutex> lock(mutex_);
   const auto it = topics_.find(topic);
@@ -298,9 +300,8 @@ Status ClusterMetadata::SetLeader(const std::string& topic, PartitionIndex parti
 
   PartitionAssignment& assignment = it->second.partitions[index];
   if (!assignment.HasReplica(leader)) {
-    return InvalidArgument("broker " + std::to_string(leader.value()) +
-                           " is not a replica of " + topic + "-" +
-                           std::to_string(partition.value()));
+    return InvalidArgument("broker " + std::to_string(leader.value()) + " is not a replica of " +
+                           topic + "-" + std::to_string(partition.value()));
   }
   if (assignment.leader == leader) return OkStatus();
 
@@ -418,14 +419,14 @@ Status ClusterMetadata::LoadFrom(const std::filesystem::path& path) {
 
   // Partitions must be dense and in index order; lookups index directly.
   for (auto& [name, descriptor] : loaded) {
-    std::sort(descriptor.partitions.begin(), descriptor.partitions.end(),
+    std::sort(descriptor.partitions.begin(),
+              descriptor.partitions.end(),
               [](const PartitionAssignment& a, const PartitionAssignment& b) {
                 return a.index < b.index;
               });
     for (std::size_t i = 0; i < descriptor.partitions.size(); ++i) {
       if (descriptor.partitions[i].index.value() != static_cast<std::int32_t>(i)) {
-        return Corruption("topic '" + name + "' has a gap at partition index " +
-                          std::to_string(i));
+        return Corruption("topic '" + name + "' has a gap at partition index " + std::to_string(i));
       }
     }
   }

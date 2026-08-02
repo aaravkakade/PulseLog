@@ -22,7 +22,9 @@ namespace pulselog {
       .count();
 }
 
-[[nodiscard]] inline std::int64_t MonotonicMicros() noexcept { return MonotonicNanos() / 1000; }
+[[nodiscard]] inline std::int64_t MonotonicMicros() noexcept {
+  return MonotonicNanos() / 1000;
+}
 
 [[nodiscard]] inline TimestampMs WallClockMillis() noexcept {
   return std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -40,7 +42,9 @@ class CoarseClock {
  public:
   void Tick() noexcept { nanos_.store(MonotonicNanos(), std::memory_order_relaxed); }
 
-  [[nodiscard]] std::int64_t Nanos() const noexcept { return nanos_.load(std::memory_order_relaxed); }
+  [[nodiscard]] std::int64_t Nanos() const noexcept {
+    return nanos_.load(std::memory_order_relaxed);
+  }
 
   [[nodiscard]] std::int64_t Millis() const noexcept { return Nanos() / 1'000'000; }
 

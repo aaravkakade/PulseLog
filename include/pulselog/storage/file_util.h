@@ -6,14 +6,14 @@
 #ifndef PULSELOG_STORAGE_FILE_UTIL_H_
 #define PULSELOG_STORAGE_FILE_UTIL_H_
 
-#include <sys/uio.h>
-
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <span>
 #include <string>
 #include <vector>
+
+#include <sys/uio.h>
 
 #include "pulselog/base/buffer.h"
 #include "pulselog/base/status.h"
@@ -89,7 +89,8 @@ class FileHandle {
   ~FileHandle() { Close(); }
 
   // Opens for read+write, creating if requested. `append_only` sets O_APPEND.
-  [[nodiscard]] static Result<FileHandle> Open(const std::filesystem::path& path, bool create,
+  [[nodiscard]] static Result<FileHandle> Open(const std::filesystem::path& path,
+                                               bool create,
                                                bool read_only = false);
 
   [[nodiscard]] bool valid() const noexcept { return fd_ >= 0; }
@@ -108,11 +109,11 @@ class FileHandle {
 
   // Reads exactly `size` bytes at `offset`. Returns kOutOfRange on EOF before
   // `size` bytes are available.
-  [[nodiscard]] Status ReadExactAt(std::uint8_t* dst, std::size_t size,
-                                   std::uint64_t offset) const;
+  [[nodiscard]] Status ReadExactAt(std::uint8_t* dst, std::size_t size, std::uint64_t offset) const;
 
   // Reads up to `size` bytes; returns how many were actually read (0 at EOF).
-  [[nodiscard]] Result<std::size_t> ReadAt(std::uint8_t* dst, std::size_t size,
+  [[nodiscard]] Result<std::size_t> ReadAt(std::uint8_t* dst,
+                                           std::size_t size,
                                            std::uint64_t offset) const;
 
   // Flushes according to `mode`. See SyncMode for what each one promises.
@@ -168,7 +169,8 @@ class MemoryMap {
 
   ~MemoryMap() { Unmap(); }
 
-  [[nodiscard]] static Result<MemoryMap> Create(const FileHandle& file, std::uint64_t size,
+  [[nodiscard]] static Result<MemoryMap> Create(const FileHandle& file,
+                                                std::uint64_t size,
                                                 bool writable);
 
   [[nodiscard]] bool valid() const noexcept { return data_ != nullptr; }
@@ -200,8 +202,8 @@ class MemoryMap {
 [[nodiscard]] Status SyncDirectory(const std::filesystem::path& path);
 
 // Lists regular files directly inside `dir` whose name ends with `suffix`.
-[[nodiscard]] Result<std::vector<std::filesystem::path>> ListFiles(
-    const std::filesystem::path& dir, std::string_view suffix);
+[[nodiscard]] Result<std::vector<std::filesystem::path>> ListFiles(const std::filesystem::path& dir,
+                                                                   std::string_view suffix);
 
 // Free bytes on the filesystem holding `path`. Used by the disk-full guard.
 [[nodiscard]] Result<std::uint64_t> AvailableBytes(const std::filesystem::path& path);

@@ -24,7 +24,8 @@ namespace pulselog {
 [[nodiscard]] std::uint32_t Crc32c(std::span<const std::uint8_t> data,
                                    std::uint32_t seed = 0) noexcept;
 
-[[nodiscard]] inline std::uint32_t Crc32c(const void* data, std::size_t size,
+[[nodiscard]] inline std::uint32_t Crc32c(const void* data,
+                                          std::size_t size,
                                           std::uint32_t seed = 0) noexcept {
   return Crc32c(std::span<const std::uint8_t>(static_cast<const std::uint8_t*>(data), size), seed);
 }

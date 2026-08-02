@@ -87,7 +87,9 @@ class MetricRegistry {
 
   Gauge& GetGauge(std::string name, std::string help, Labels labels = {});
 
-  Histogram& GetHistogram(std::string name, std::string help, Labels labels = {},
+  Histogram& GetHistogram(std::string name,
+                          std::string help,
+                          Labels labels = {},
                           std::int64_t max_trackable = 60'000'000'000,
                           int significant_digits = 3);
 

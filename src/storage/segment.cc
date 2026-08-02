@@ -67,8 +67,7 @@ Result<std::unique_ptr<Segment>> Segment::Open(const std::filesystem::path& dir,
     // updates per append and less fragmentation. The file is left at its full
     // size on disk; `end_position_` is what defines valid content, and
     // recovery truncates the unused tail when the segment is rolled.
-    const Status status =
-        segment->file_.Preallocate(static_cast<std::uint64_t>(options.max_bytes));
+    const Status status = segment->file_.Preallocate(static_cast<std::uint64_t>(options.max_bytes));
     if (!status.ok()) {
       PL_WARN(kComponent) << "preallocation failed, continuing without it"
                           << " path=" << segment->log_path_.filename().string()
@@ -107,8 +106,8 @@ Result<RecoveryReport> Segment::Recover(bool full_scan) {
 
   bool done = false;
   while (!done && position < file_size) {
-    const std::size_t want =
-        static_cast<std::size_t>(std::min<std::uint64_t>(kRecoveryChunkBytes, file_size - position));
+    const std::size_t want = static_cast<std::size_t>(
+        std::min<std::uint64_t>(kRecoveryChunkBytes, file_size - position));
     chunk.resize(want);
     PL_ASSIGN_OR_RETURN(const std::size_t got, file_.ReadAt(chunk.data(), want, position));
     if (got == 0) break;
@@ -118,7 +117,8 @@ Result<RecoveryReport> Segment::Recover(bool full_scan) {
     while (chunk_pos < chunk.size()) {
       protocol::RecordView view;
       std::size_t next = 0;
-      const Status status = protocol::ParseRecord(chunk, chunk_pos, /*verify_crc=*/true, view, next);
+      const Status status =
+          protocol::ParseRecord(chunk, chunk_pos, /*verify_crc=*/true, view, next);
       if (!status.ok()) {
         if (status.code() == ErrorCode::kOutOfRange && got == want && position + got < file_size) {
           // The record straddles the chunk boundary; re-read from here.
@@ -127,8 +127,8 @@ Result<RecoveryReport> Segment::Recover(bool full_scan) {
         // ParseRecord reports a chunk-relative offset; recovery reads in
         // chunks, so translate it to an absolute file offset before it reaches
         // an operator who will go looking for that byte.
-        stop_reason = status.ToString() + " (file offset " +
-                      std::to_string(position + chunk_pos) + ")";
+        stop_reason =
+            status.ToString() + " (file offset " + std::to_string(position + chunk_pos) + ")";
         done = true;
         break;
       }
@@ -209,8 +209,11 @@ Result<RecoveryReport> Segment::Recover(bool full_scan) {
   return report;
 }
 
-Status Segment::FinishAppend(std::size_t bytes, Offset append_base, Offset last_offset,
-                             std::uint32_t record_count, TimestampMs max_timestamp) {
+Status Segment::FinishAppend(std::size_t bytes,
+                             Offset append_base,
+                             Offset last_offset,
+                             std::uint32_t record_count,
+                             TimestampMs max_timestamp) {
   const std::uint64_t start = end_position_.load(std::memory_order_relaxed);
 
   // Index entry first, so a reader that observes the new end position can
@@ -238,14 +241,17 @@ Status Segment::FinishAppend(std::size_t bytes, Offset append_base, Offset last_
   record_count_.fetch_add(record_count, std::memory_order_relaxed);
 
   TimestampMs previous = max_timestamp_.load(std::memory_order_relaxed);
-  while (max_timestamp > previous &&
-         !max_timestamp_.compare_exchange_weak(previous, max_timestamp, std::memory_order_relaxed)) {
+  while (max_timestamp > previous && !max_timestamp_.compare_exchange_weak(
+                                         previous, max_timestamp, std::memory_order_relaxed)) {
   }
   return OkStatus();
 }
 
-Status Segment::AppendEncoded(ByteSpan records, Offset append_base, Offset last_offset,
-                              std::uint32_t record_count, TimestampMs max_timestamp) {
+Status Segment::AppendEncoded(ByteSpan records,
+                              Offset append_base,
+                              Offset last_offset,
+                              std::uint32_t record_count,
+                              TimestampMs max_timestamp) {
   if (records.empty()) return OkStatus();
   const std::uint64_t start = end_position_.load(std::memory_order_relaxed);
 
@@ -258,8 +264,10 @@ Status Segment::AppendEncoded(ByteSpan records, Offset append_base, Offset last_
   return FinishAppend(records.size(), append_base, last_offset, record_count, max_timestamp);
 }
 
-Status Segment::AppendEncodedVectored(std::span<const ByteSpan> chunks, Offset append_base,
-                                      Offset last_offset, std::uint32_t record_count,
+Status Segment::AppendEncodedVectored(std::span<const ByteSpan> chunks,
+                                      Offset append_base,
+                                      Offset last_offset,
+                                      std::uint32_t record_count,
                                       TimestampMs max_timestamp) {
   std::size_t total = 0;
   for (const auto& chunk : chunks) total += chunk.size();
@@ -307,15 +315,15 @@ Result<std::uint64_t> Segment::PositionFor(Offset offset) const {
   // handled by advancing and reading again, and a record larger than the block
   // grows it once.
   std::vector<std::uint8_t> block;
-  std::size_t block_size = static_cast<std::size_t>(
-      std::max<std::int64_t>(options_.index_interval_bytes, 8192));
+  std::size_t block_size =
+      static_cast<std::size_t>(std::max<std::int64_t>(options_.index_interval_bytes, 8192));
 
   while (current < offset) {
     const std::size_t want =
         static_cast<std::size_t>(std::min<std::uint64_t>(block_size, limit - position));
     if (want < 4) {
-      return Corruption("scan for offset " + std::to_string(offset) +
-                        " ran off the segment at " + std::to_string(position));
+      return Corruption("scan for offset " + std::to_string(offset) + " ran off the segment at " +
+                        std::to_string(position));
     }
     block.resize(want);
     PL_ASSIGN_OR_RETURN(const std::size_t got, file_.ReadAt(block.data(), want, position));
@@ -330,8 +338,8 @@ Result<std::uint64_t> Segment::PositionFor(Offset offset) const {
       const std::uint64_t record_size = static_cast<std::uint64_t>(length) + 4;
       if (record_size < protocol::kRecordFixedPrefix ||
           position + block_pos + record_size > limit) {
-        return Corruption("scan for offset " + std::to_string(offset) +
-                          " ran off the segment at " + std::to_string(position + block_pos));
+        return Corruption("scan for offset " + std::to_string(offset) + " ran off the segment at " +
+                          std::to_string(position + block_pos));
       }
       // Stop if this record straddles the block; the next read starts here.
       if (block_pos + record_size > got) break;
@@ -344,14 +352,14 @@ Result<std::uint64_t> Segment::PositionFor(Offset offset) const {
       // it exactly rather than guessing.
       const std::uint32_t length = LoadLe<std::uint32_t>(block.data());
       const std::uint64_t record_size = static_cast<std::uint64_t>(length) + 4;
-      if (record_size < protocol::kRecordFixedPrefix ||
-          record_size > protocol::kMaxRecordBytes || position + record_size > limit) {
+      if (record_size < protocol::kRecordFixedPrefix || record_size > protocol::kMaxRecordBytes ||
+          position + record_size > limit) {
         return Corruption("scan for offset " + std::to_string(offset) +
                           " found an impossible record size at " + std::to_string(position));
       }
       if (static_cast<std::size_t>(record_size) <= block_size) {
-        return Corruption("scan for offset " + std::to_string(offset) +
-                          " made no progress at " + std::to_string(position));
+        return Corruption("scan for offset " + std::to_string(offset) + " made no progress at " +
+                          std::to_string(position));
       }
       block_size = static_cast<std::size_t>(record_size);
       continue;
@@ -361,7 +369,8 @@ Result<std::uint64_t> Segment::PositionFor(Offset offset) const {
   return position;
 }
 
-Result<Segment::ReadResult> Segment::Read(Offset from, std::size_t max_bytes,
+Result<Segment::ReadResult> Segment::Read(Offset from,
+                                          std::size_t max_bytes,
                                           ByteBuffer& out) const {
   ReadResult result;
   const Offset end = next_offset_.load(std::memory_order_acquire);
@@ -390,17 +399,16 @@ Result<Segment::ReadResult> Segment::Read(Offset from, std::size_t max_bytes,
     // enough to contain it whole.
     std::array<std::uint8_t, 4> length_bytes{};
     PL_RETURN_IF_ERROR(file_.ReadExactAt(length_bytes.data(), length_bytes.size(), cursor));
-    const std::size_t next_record_size = static_cast<std::size_t>(LoadLe<std::uint32_t>(
-                                             length_bytes.data())) +
-                                         4;
-    if (next_record_size < protocol::kRecordFixedPrefix ||
-        cursor + next_record_size > limit) {
+    const std::size_t next_record_size =
+        static_cast<std::size_t>(LoadLe<std::uint32_t>(length_bytes.data())) + 4;
+    if (next_record_size < protocol::kRecordFixedPrefix || cursor + next_record_size > limit) {
       return Corruption("record at position " + std::to_string(cursor) +
                         " claims a size that runs past the segment end");
     }
 
     std::size_t want = static_cast<std::size_t>(
-        std::min<std::uint64_t>({static_cast<std::uint64_t>(kRecoveryChunkBytes), limit - cursor,
+        std::min<std::uint64_t>({static_cast<std::uint64_t>(kRecoveryChunkBytes),
+                                 limit - cursor,
                                  static_cast<std::uint64_t>(budget_left)}));
     if (want < next_record_size) {
       // The budget cannot hold this record. Returning at least one record

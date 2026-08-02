@@ -27,7 +27,8 @@ Consumer::~Consumer() {
 }
 
 Result<std::vector<InboundRecord>> Consumer::FetchInto(const std::string& topic,
-                                                       PartitionIndex partition, Offset offset) {
+                                                       PartitionIndex partition,
+                                                       Offset offset) {
   protocol::FetchRequest request;
   request.topic = topic;
   request.partition = partition;
@@ -42,8 +43,8 @@ Result<std::vector<InboundRecord>> Consumer::FetchInto(const std::string& topic,
   request.Encode(writer);
 
   PL_ASSIGN_OR_RETURN(net::SyncClient * connection, context_.LeaderFor(topic, partition));
-  auto frame = connection->Call(protocol::OpCode::kFetch, context_.NextRequestId(),
-                                scratch_.Readable());
+  auto frame =
+      connection->Call(protocol::OpCode::kFetch, context_.NextRequestId(), scratch_.Readable());
   if (!frame.ok()) {
     context_.InvalidateTopic(topic);
     return frame.status();
@@ -88,18 +89,19 @@ Result<std::vector<InboundRecord>> Consumer::FetchInto(const std::string& topic,
 
   const TopicPartition topic_partition{topic, partition};
   last_fetched_ = topic_partition;
-  last_fetch_next_offset_ =
-      records.empty() ? offset : records.back().offset + 1;
+  last_fetch_next_offset_ = records.empty() ? offset : records.back().offset + 1;
   positions_[topic_partition] = last_fetch_next_offset_;
   return records;
 }
 
 Result<std::vector<InboundRecord>> Consumer::Fetch(const std::string& topic,
-                                                   PartitionIndex partition, Offset offset) {
+                                                   PartitionIndex partition,
+                                                   Offset offset) {
   return FetchInto(topic, partition, offset);
 }
 
-Result<Offset> Consumer::ListOffset(const std::string& topic, PartitionIndex partition,
+Result<Offset> Consumer::ListOffset(const std::string& topic,
+                                    PartitionIndex partition,
                                     TimestampMs timestamp) {
   protocol::ListOffsetsRequest request;
   request.topic = topic;
@@ -111,8 +113,10 @@ Result<Offset> Consumer::ListOffset(const std::string& topic, PartitionIndex par
   request.Encode(writer);
 
   PL_ASSIGN_OR_RETURN(net::SyncClient * connection, context_.LeaderFor(topic, partition));
-  PL_ASSIGN_OR_RETURN(auto frame, connection->Call(protocol::OpCode::kListOffsets,
-                                                   context_.NextRequestId(), scratch_.Readable()));
+  PL_ASSIGN_OR_RETURN(
+      auto frame,
+      connection->Call(
+          protocol::OpCode::kListOffsets, context_.NextRequestId(), scratch_.Readable()));
   protocol::ListOffsetsResponse response;
   PL_RETURN_IF_ERROR(ClientContext::DecodeResponse(frame.payload, response));
   return response.offset;
@@ -138,8 +142,10 @@ Status Consumer::Join() {
   request.Encode(writer);
 
   PL_ASSIGN_OR_RETURN(net::SyncClient * connection, context_.AnyBroker());
-  PL_ASSIGN_OR_RETURN(auto frame, connection->Call(protocol::OpCode::kJoinGroup,
-                                                   context_.NextRequestId(), scratch_.Readable()));
+  PL_ASSIGN_OR_RETURN(
+      auto frame,
+      connection->Call(
+          protocol::OpCode::kJoinGroup, context_.NextRequestId(), scratch_.Readable()));
   protocol::JoinGroupResponse response;
   PL_RETURN_IF_ERROR(ClientContext::DecodeResponse(frame.payload, response));
 
@@ -164,7 +170,8 @@ Status Consumer::Join() {
       positions[topic_partition] = committed.value();
       continue;
     }
-    auto start = ListOffset(topic_partition.topic, topic_partition.partition,
+    auto start = ListOffset(topic_partition.topic,
+                            topic_partition.partition,
                             config_.start_from_earliest ? kEarliestOffset : kLatestOffset);
     positions[topic_partition] = start.ok() ? start.value() : 0;
   }
@@ -189,8 +196,10 @@ Status Consumer::Leave() {
   request.Encode(writer);
 
   PL_ASSIGN_OR_RETURN(net::SyncClient * connection, context_.AnyBroker());
-  PL_ASSIGN_OR_RETURN(auto frame, connection->Call(protocol::OpCode::kLeaveGroup,
-                                                   context_.NextRequestId(), scratch_.Readable()));
+  PL_ASSIGN_OR_RETURN(
+      auto frame,
+      connection->Call(
+          protocol::OpCode::kLeaveGroup, context_.NextRequestId(), scratch_.Readable()));
   protocol::LeaveGroupResponse response;
   const Status status = ClientContext::DecodeResponse(frame.payload, response);
 
@@ -213,8 +222,10 @@ Status Consumer::Heartbeat() {
   request.Encode(writer);
 
   PL_ASSIGN_OR_RETURN(net::SyncClient * connection, context_.AnyBroker());
-  PL_ASSIGN_OR_RETURN(auto frame, connection->Call(protocol::OpCode::kHeartbeat,
-                                                   context_.NextRequestId(), scratch_.Readable()));
+  PL_ASSIGN_OR_RETURN(
+      auto frame,
+      connection->Call(
+          protocol::OpCode::kHeartbeat, context_.NextRequestId(), scratch_.Readable()));
   protocol::HeartbeatResponse response;
   // Heartbeat is the one call whose error responses are still actionable --
   // REBALANCE_IN_PROGRESS carries `rejoin_required` -- so the header is
@@ -262,9 +273,7 @@ Result<std::vector<InboundRecord>> Consumer::Poll() {
   for (std::size_t attempt = 0; attempt < assignment_.size(); ++attempt) {
     const TopicPartition& topic_partition =
         assignment_[(next_partition_ + attempt) % assignment_.size()];
-    const Offset position = positions_.count(topic_partition) > 0
-                                ? positions_[topic_partition]
-                                : 0;
+    const Offset position = positions_.count(topic_partition) > 0 ? positions_[topic_partition] : 0;
 
     auto records = FetchInto(topic_partition.topic, topic_partition.partition, position);
     if (!records.ok()) {
@@ -275,8 +284,8 @@ Result<std::vector<InboundRecord>> Consumer::Poll() {
             ListOffset(topic_partition.topic, topic_partition.partition, kEarliestOffset);
         if (earliest.ok()) {
           PL_WARN(kComponent) << "position was deleted by retention; skipping ahead"
-                              << " partition=" << topic_partition.ToString()
-                              << " was=" << position << " now=" << earliest.value();
+                              << " partition=" << topic_partition.ToString() << " was=" << position
+                              << " now=" << earliest.value();
           positions_[topic_partition] = earliest.value();
         }
         continue;
@@ -307,8 +316,10 @@ Status Consumer::CommitOffset(const std::string& topic, PartitionIndex partition
   request.Encode(writer);
 
   PL_ASSIGN_OR_RETURN(net::SyncClient * connection, context_.AnyBroker());
-  PL_ASSIGN_OR_RETURN(auto frame, connection->Call(protocol::OpCode::kCommitOffset,
-                                                   context_.NextRequestId(), scratch_.Readable()));
+  PL_ASSIGN_OR_RETURN(
+      auto frame,
+      connection->Call(
+          protocol::OpCode::kCommitOffset, context_.NextRequestId(), scratch_.Readable()));
   protocol::CommitOffsetResponse response;
   PL_RETURN_IF_ERROR(ClientContext::DecodeResponse(frame.payload, response));
   ++stats_.commits;
@@ -333,8 +344,10 @@ Result<Offset> Consumer::CommittedOffset(const std::string& topic, PartitionInde
   request.Encode(writer);
 
   PL_ASSIGN_OR_RETURN(net::SyncClient * connection, context_.AnyBroker());
-  PL_ASSIGN_OR_RETURN(auto frame, connection->Call(protocol::OpCode::kFetchOffset,
-                                                   context_.NextRequestId(), scratch_.Readable()));
+  PL_ASSIGN_OR_RETURN(
+      auto frame,
+      connection->Call(
+          protocol::OpCode::kFetchOffset, context_.NextRequestId(), scratch_.Readable()));
   protocol::FetchOffsetResponse response;
   PL_RETURN_IF_ERROR(ClientContext::DecodeResponse(frame.payload, response));
   return response.offset;

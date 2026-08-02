@@ -56,7 +56,9 @@ class OffsetStore {
   [[nodiscard]] static Result<std::unique_ptr<OffsetStore>> Open(
       const std::filesystem::path& directory, bool sync_on_commit);
 
-  [[nodiscard]] Status Commit(const OffsetKey& key, Offset offset, std::string_view metadata,
+  [[nodiscard]] Status Commit(const OffsetKey& key,
+                              Offset offset,
+                              std::string_view metadata,
                               TimestampMs now);
 
   [[nodiscard]] std::optional<CommittedOffset> Get(const OffsetKey& key) const;

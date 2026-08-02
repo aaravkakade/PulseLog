@@ -9,32 +9,32 @@ namespace {
 
 // Reads an integer key, propagating a parse failure instead of silently
 // defaulting. Every getter below follows this pattern.
-#define PL_CONFIG_INT(target, key, fallback)               \
-  do {                                                     \
-    auto value = store.GetInt(key, fallback);              \
-    if (!value.ok()) return value.status();                \
+#define PL_CONFIG_INT(target, key, fallback)                 \
+  do {                                                       \
+    auto value = store.GetInt(key, fallback);                \
+    if (!value.ok()) return value.status();                  \
     (target) = static_cast<decltype(target)>(value.value()); \
   } while (false)
 
-#define PL_CONFIG_BYTES(target, key, fallback)             \
-  do {                                                     \
-    auto value = store.GetBytes(key, fallback);            \
-    if (!value.ok()) return value.status();                \
+#define PL_CONFIG_BYTES(target, key, fallback)               \
+  do {                                                       \
+    auto value = store.GetBytes(key, fallback);              \
+    if (!value.ok()) return value.status();                  \
     (target) = static_cast<decltype(target)>(value.value()); \
   } while (false)
 
-#define PL_CONFIG_MS(target, key, fallback)                \
-  do {                                                     \
-    auto value = store.GetDurationMs(key, fallback);       \
-    if (!value.ok()) return value.status();                \
+#define PL_CONFIG_MS(target, key, fallback)                  \
+  do {                                                       \
+    auto value = store.GetDurationMs(key, fallback);         \
+    if (!value.ok()) return value.status();                  \
     (target) = static_cast<decltype(target)>(value.value()); \
   } while (false)
 
-#define PL_CONFIG_BOOL(target, key, fallback) \
-  do {                                        \
+#define PL_CONFIG_BOOL(target, key, fallback)  \
+  do {                                         \
     auto value = store.GetBool(key, fallback); \
-    if (!value.ok()) return value.status();   \
-    (target) = value.value();                 \
+    if (!value.ok()) return value.status();    \
+    (target) = value.value();                  \
   } while (false)
 
 }  // namespace
@@ -61,8 +61,7 @@ Result<BrokerConfig> BrokerConfig::FromStore(const ConfigStore& store) {
   PL_CONFIG_INT(config.max_connections, "net.max.connections", 4096);
   PL_CONFIG_BYTES(config.max_frame_bytes, "net.max.frame.bytes", 64LL * 1024 * 1024);
   PL_CONFIG_MS(config.connection_idle_timeout_ms, "net.idle.timeout", 0);
-  PL_CONFIG_BYTES(config.output_high_water_bytes, "net.output.high.water.bytes",
-                  4LL * 1024 * 1024);
+  PL_CONFIG_BYTES(config.output_high_water_bytes, "net.output.high.water.bytes", 4LL * 1024 * 1024);
   PL_CONFIG_BYTES(config.output_max_bytes, "net.output.max.bytes", 64LL * 1024 * 1024);
 
   PL_CONFIG_INT(config.worker_threads, "broker.worker.threads", 2);
@@ -79,8 +78,8 @@ Result<BrokerConfig> BrokerConfig::FromStore(const ConfigStore& store) {
 
   const std::string write_mode = store.GetString("storage.write.mode", "write");
   if (!storage::ParseWriteMode(write_mode, config.write_mode)) {
-    return InvalidArgument("storage.write.mode must be write, writev or mmap; got '" +
-                           write_mode + "'");
+    return InvalidArgument("storage.write.mode must be write, writev or mmap; got '" + write_mode +
+                           "'");
   }
 
   const std::string sync_mode = store.GetString("storage.fsync.mode", "full");
@@ -115,8 +114,8 @@ Result<BrokerConfig> BrokerConfig::FromStore(const ConfigStore& store) {
 
   const std::string log_level = store.GetString("log.level", "info");
   if (!ParseLogLevel(log_level, config.log_level)) {
-    return InvalidArgument("log.level must be trace|debug|info|warn|error|off; got '" +
-                           log_level + "'");
+    return InvalidArgument("log.level must be trace|debug|info|warn|error|off; got '" + log_level +
+                           "'");
   }
   config.log_file = store.GetString("log.file", "");
 
@@ -199,7 +198,8 @@ std::string BrokerConfig::Describe() const {
   return out.str();
 }
 
-storage::LogOptions BrokerConfig::LogOptionsFor(const std::string& topic, PartitionIndex partition,
+storage::LogOptions BrokerConfig::LogOptionsFor(const std::string& topic,
+                                                PartitionIndex partition,
                                                 std::int64_t retention_override,
                                                 std::int64_t segment_override) const {
   storage::LogOptions options;

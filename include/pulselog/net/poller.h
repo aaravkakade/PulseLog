@@ -66,8 +66,7 @@ class Poller {
 
   // Waits up to `timeout_ms` (-1 blocks indefinitely) and appends ready
   // descriptors to `out`. `out` is cleared first. Returns the number ready.
-  [[nodiscard]] virtual Result<std::size_t> Wait(std::vector<PollEvent>& out,
-                                                 int timeout_ms) = 0;
+  [[nodiscard]] virtual Result<std::size_t> Wait(std::vector<PollEvent>& out, int timeout_ms) = 0;
 
   [[nodiscard]] virtual std::string_view Name() const = 0;
 };

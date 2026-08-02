@@ -23,13 +23,16 @@ std::string_view GroupStateName(GroupState state) noexcept {
   return "unknown";
 }
 
-GroupCoordinator::GroupCoordinator(std::unique_ptr<OffsetStore> offsets, PartitionLookup lookup,
+GroupCoordinator::GroupCoordinator(std::unique_ptr<OffsetStore> offsets,
+                                   PartitionLookup lookup,
                                    std::int64_t default_session_timeout_ms)
     : offsets_(std::move(offsets)),
       lookup_(std::move(lookup)),
       default_session_timeout_ms_(default_session_timeout_ms) {}
 
-GroupCoordinator::~GroupCoordinator() { Close(); }
+GroupCoordinator::~GroupCoordinator() {
+  Close();
+}
 
 std::string GroupCoordinator::AllocateMemberId(const std::string& group_id) {
   // Members are identified by a coordinator-assigned ID rather than anything
@@ -60,8 +63,8 @@ void GroupCoordinator::RebalanceLocked(Group& group, std::int64_t now_ms) {
   std::sort(topics.begin(), topics.end());
   topics.erase(std::unique(topics.begin(), topics.end()), topics.end());
 
-  const std::vector<TopicPartition> partitions = lookup_ ? lookup_(topics)
-                                                         : std::vector<TopicPartition>{};
+  const std::vector<TopicPartition> partitions =
+      lookup_ ? lookup_(topics) : std::vector<TopicPartition>{};
   const Assignment assignment = Assign(group.strategy, member_ids, partitions);
 
   for (auto& [id, member] : group.members) {
@@ -75,8 +78,7 @@ void GroupCoordinator::RebalanceLocked(Group& group, std::int64_t now_ms) {
 
   PL_INFO(kComponent) << "rebalanced group"
                       << " group=" << group.group_id << " generation=" << group.generation.value()
-                      << " members=" << group.members.size()
-                      << " partitions=" << partitions.size()
+                      << " members=" << group.members.size() << " partitions=" << partitions.size()
                       << " strategy=" << AssignmentStrategyName(group.strategy);
 }
 
@@ -226,9 +228,9 @@ protocol::CommitOffsetResponse GroupCoordinator::Commit(
         // This is the fence. A consumer that was partitioned away and kept
         // processing cannot move the group's committed position.
         response.header.error = ErrorCode::kIllegalGeneration;
-        response.header.error_message =
-            "generation " + std::to_string(request.generation.value()) + " is stale; current is " +
-            std::to_string(group.generation.value());
+        response.header.error_message = "generation " + std::to_string(request.generation.value()) +
+                                        " is stale; current is " +
+                                        std::to_string(group.generation.value());
         return response;
       }
       const auto& assignment = member_it->second.assignment;
@@ -331,7 +333,9 @@ std::map<TopicPartition, Offset> GroupCoordinator::CommittedOffsets(
   return result;
 }
 
-Status GroupCoordinator::Flush() { return offsets_ ? offsets_->Flush() : OkStatus(); }
+Status GroupCoordinator::Flush() {
+  return offsets_ ? offsets_->Flush() : OkStatus();
+}
 
 void GroupCoordinator::Close() {
   if (offsets_ == nullptr) return;
