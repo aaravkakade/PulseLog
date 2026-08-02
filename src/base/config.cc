@@ -138,15 +138,18 @@ void ConfigStore::Set(std::string key, std::string value) {
 }
 
 bool ConfigStore::Contains(std::string_view key) const {
+  MarkRead(key);
   return entries_.find(key) != entries_.end();
 }
 
 std::string ConfigStore::GetString(std::string_view key, std::string_view fallback) const {
+  MarkRead(key);
   const auto it = entries_.find(key);
   return it == entries_.end() ? std::string(fallback) : it->second;
 }
 
 Result<std::string> ConfigStore::RequireString(std::string_view key) const {
+  MarkRead(key);
   const auto it = entries_.find(key);
   if (it == entries_.end()) {
     return InvalidArgument("missing required config key: " + std::string(key));
@@ -155,12 +158,14 @@ Result<std::string> ConfigStore::RequireString(std::string_view key) const {
 }
 
 Result<std::int64_t> ConfigStore::GetInt(std::string_view key, std::int64_t fallback) const {
+  MarkRead(key);
   const auto it = entries_.find(key);
   if (it == entries_.end()) return fallback;
   return ParseInteger(key, it->second);
 }
 
 Result<double> ConfigStore::GetDouble(std::string_view key, double fallback) const {
+  MarkRead(key);
   const auto it = entries_.find(key);
   if (it == entries_.end()) return fallback;
   // std::from_chars for double is not available in every libc++ shipped with
@@ -175,6 +180,7 @@ Result<double> ConfigStore::GetDouble(std::string_view key, double fallback) con
 }
 
 Result<bool> ConfigStore::GetBool(std::string_view key, bool fallback) const {
+  MarkRead(key);
   const auto it = entries_.find(key);
   if (it == entries_.end()) return fallback;
   const std::string value = ToLower(it->second);
@@ -185,6 +191,7 @@ Result<bool> ConfigStore::GetBool(std::string_view key, bool fallback) const {
 }
 
 Result<std::int64_t> ConfigStore::GetBytes(std::string_view key, std::int64_t fallback) const {
+  MarkRead(key);
   const auto it = entries_.find(key);
   if (it == entries_.end()) return fallback;
 
@@ -220,6 +227,7 @@ Result<std::int64_t> ConfigStore::GetBytes(std::string_view key, std::int64_t fa
 }
 
 Result<std::int64_t> ConfigStore::GetDurationMs(std::string_view key, std::int64_t fallback) const {
+  MarkRead(key);
   const auto it = entries_.find(key);
   if (it == entries_.end()) return fallback;
 
@@ -253,6 +261,7 @@ Result<std::int64_t> ConfigStore::GetDurationMs(std::string_view key, std::int64
 
 std::vector<std::string> ConfigStore::GetList(std::string_view key) const {
   std::vector<std::string> out;
+  MarkRead(key);
   const auto it = entries_.find(key);
   if (it == entries_.end()) return out;
 
@@ -274,6 +283,19 @@ std::string ConfigStore::Dump() const {
     out << key << '=' << value << '\n';
   }
   return out.str();
+}
+
+void ConfigStore::MarkRead(std::string_view key) const {
+  read_keys_.emplace(key);
+}
+
+std::vector<std::string> ConfigStore::UnreadKeys() const {
+  std::vector<std::string> unread;
+  for (const auto& [key, value] : entries_) {
+    (void)value;
+    if (read_keys_.find(key) == read_keys_.end()) unread.push_back(key);
+  }
+  return unread;
 }
 
 }  // namespace pulselog

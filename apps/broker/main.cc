@@ -86,6 +86,22 @@ int main(int argc, char** argv) {
     return 1;
   }
 
+  // A key nobody reads is a misconfiguration, not a harmless extra. Starting
+  // anyway means running on defaults while looking configured, which is how a
+  // three-broker Docker cluster silently ran as three single-broker clusters:
+  // the compose file wrote PULSELOG_CLUSTER__BROKERS, which maps to
+  // `cluster_brokers`, and no one read it.
+  //
+  // This runs after FromStore, so every key the broker consumes has been read.
+  if (const auto unread = store.UnreadKeys(); !unread.empty()) {
+    std::cerr << "pulselog-broker: unrecognised configuration key(s):\n";
+    for (const auto& key : unread) std::cerr << "  " << key << '\n';
+    std::cerr << "Environment variables map PULSELOG_A_B to key `a.b`; a doubled "
+                 "underscore\nis a literal underscore, not a separator. Run --help "
+                 "for the key list.\n";
+    return 1;
+  }
+
   // Handle the signals a container runtime and a shell actually send.
   std::signal(SIGINT, HandleSignal);
   std::signal(SIGTERM, HandleSignal);

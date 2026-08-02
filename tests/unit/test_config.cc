@@ -1,3 +1,4 @@
+#include <cstdlib>
 #include <string>
 
 #include "test_support/temp_dir.h"
@@ -129,6 +130,57 @@ TEST(Config, RequireStringReportsMissingKey) {
   const auto missing = config.RequireString("broker.data.dir");
   ASSERT_FALSE(missing.ok());
   EXPECT_NE(missing.status().message().find("broker.data.dir"), std::string::npos);
+}
+
+TEST(Config, UnreadKeysReportsWhatNobodyConsumed) {
+  // Validating values is not enough. A key nobody reads leaves the process
+  // running on defaults while looking configured, which is exactly how a
+  // three-broker Docker cluster ran as three single-broker clusters.
+  ConfigStore config;
+  config.Set("broker.id", "3");
+  config.Set("cluster_brokers", "1@host-a:9092");  // wrong separator
+  config.Set("net.listen", "0.0.0.0:9092");
+
+  EXPECT_EQ(config.GetInt("broker.id", 0).value(), 3);
+  EXPECT_EQ(config.GetString("net.listen", ""), "0.0.0.0:9092");
+
+  const auto unread = config.UnreadKeys();
+  ASSERT_EQ(unread.size(), 1U);
+  EXPECT_EQ(unread[0], "cluster_brokers");
+}
+
+TEST(Config, ReadingEveryKeyLeavesNothingUnread) {
+  ConfigStore config;
+  config.Set("a.one", "1");
+  config.Set("a.two", "true");
+  config.Set("a.three", "4MB");
+  config.Set("a.four", "250ms");
+  config.Set("a.five", "x,y");
+  config.Set("a.six", "text");
+
+  EXPECT_EQ(config.GetInt("a.one", 0).value(), 1);
+  EXPECT_TRUE(config.GetBool("a.two", false).value());
+  EXPECT_EQ(config.GetBytes("a.three", 0).value(), 4 * 1024 * 1024);
+  EXPECT_EQ(config.GetDurationMs("a.four", 0).value(), 250);
+  EXPECT_EQ(config.GetList("a.five").size(), 2U);
+  EXPECT_TRUE(config.Contains("a.six"));
+
+  EXPECT_TRUE(config.UnreadKeys().empty());
+}
+
+TEST(Config, EnvironmentSeparatorIsASingleUnderscore) {
+  // PULSELOG_A_B sets `a.b`; PULSELOG_A__B sets the literal `a_b`. Getting
+  // this backwards is silent -- the key parses fine, it just names nothing --
+  // so the mapping is pinned here.
+  ConfigStore config;
+  ASSERT_EQ(::setenv("PULSELOG_TEST_ALPHA_BETA", "value-a", 1), 0);
+  ASSERT_EQ(::setenv("PULSELOG_TEST__ALPHA", "value-b", 1), 0);
+  config.LoadEnvironment();
+  ::unsetenv("PULSELOG_TEST_ALPHA_BETA");
+  ::unsetenv("PULSELOG_TEST__ALPHA");
+
+  EXPECT_EQ(config.GetString("test.alpha.beta", ""), "value-a");
+  EXPECT_EQ(config.GetString("test_alpha", ""), "value-b");
 }
 
 }  // namespace
