@@ -8,6 +8,7 @@
 #ifndef PULSELOG_BASE_STATUS_H_
 #define PULSELOG_BASE_STATUS_H_
 
+#include <cassert>
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -161,25 +162,59 @@ class [[nodiscard]] Result {
     return value_.has_value() ? ErrorCode::kOk : status_.code();
   }
 
-  // Precondition: ok(). Calling these on an error Result is a programmer bug;
-  // debug builds trap via the optional's own checks.
-  [[nodiscard]] T& value() & { return *value_; }
+  // Precondition: ok(). Calling any of these on an error Result is a
+  // programmer bug, and the contract is the same one std::optional's own
+  // operator* carries.
+  //
+  // A debug build traps: assert() fires before the dereference. It is worth
+  // being explicit rather than relying on the standard library, because
+  // neither libstdc++ nor libc++ checks optional::operator* unless
+  // _GLIBCXX_ASSERTIONS or libc++ hardening is enabled, and neither is here.
+  // Release builds compile the assert away, so the accessors stay free.
+  //
+  // clang-tidy cannot see the precondition, so it reports every dereference
+  // below as unchecked optional access. The assert is the check.
+  // NOLINTBEGIN(bugprone-unchecked-optional-access)
+  [[nodiscard]] T& value() & {
+    assert(value_.has_value() && "Result::value() on an error Result");
+    return *value_;
+  }
 
-  [[nodiscard]] const T& value() const& { return *value_; }
+  [[nodiscard]] const T& value() const& {
+    assert(value_.has_value() && "Result::value() on an error Result");
+    return *value_;
+  }
 
-  [[nodiscard]] T&& value() && { return std::move(*value_); }
+  [[nodiscard]] T&& value() && {
+    assert(value_.has_value() && "Result::value() on an error Result");
+    return std::move(*value_);
+  }
 
   [[nodiscard]] T value_or(T fallback) const& {
     return value_.has_value() ? *value_ : std::move(fallback);
   }
 
-  T& operator*() & { return *value_; }
+  T& operator*() & {
+    assert(value_.has_value() && "Result::operator* on an error Result");
+    return *value_;
+  }
 
-  const T& operator*() const& { return *value_; }
+  const T& operator*() const& {
+    assert(value_.has_value() && "Result::operator* on an error Result");
+    return *value_;
+  }
 
-  T* operator->() { return &*value_; }
+  T* operator->() {
+    assert(value_.has_value() && "Result::operator-> on an error Result");
+    return &*value_;
+  }
 
-  const T* operator->() const { return &*value_; }
+  const T* operator->() const {
+    assert(value_.has_value() && "Result::operator-> on an error Result");
+    return &*value_;
+  }
+
+  // NOLINTEND(bugprone-unchecked-optional-access)
 
  private:
   std::optional<T> value_;

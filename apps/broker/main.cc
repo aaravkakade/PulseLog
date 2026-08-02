@@ -67,7 +67,7 @@ int main(int argc, char** argv) {
       PrintUsage();
       return 0;
     }
-    if (arg.rfind("--config=", 0) == 0) {
+    if (arg.starts_with("--config=")) {
       const std::string path = arg.substr(9);
       const Status status = store.LoadFile(path);
       if (!status.ok()) {

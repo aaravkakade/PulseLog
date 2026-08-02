@@ -130,7 +130,7 @@ ProcessStatsSampler::HostInfo ProcessStatsSampler::DescribeHost() {
     std::ifstream cpuinfo("/proc/cpuinfo");
     std::string line;
     while (std::getline(cpuinfo, line)) {
-      if (line.rfind("model name", 0) == 0) {
+      if (line.starts_with("model name")) {
         const auto colon = line.find(':');
         if (colon != std::string::npos) {
           info.cpu_model = line.substr(colon + 2);
