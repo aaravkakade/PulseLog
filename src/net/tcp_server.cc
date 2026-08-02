@@ -48,8 +48,6 @@ TcpServer::TcpServer(ServerOptions options, FrameCallback on_frame, CloseCallbac
       on_frame_(std::move(on_frame)),
       on_close_(std::move(on_close)) {}
 
-TcpServer::~TcpServer() { Stop(); }
-
 Status TcpServer::Start() {
   if (running_.load(std::memory_order_acquire)) return OkStatus();
   if (options_.io_threads == 0) options_.io_threads = 1;
@@ -108,6 +106,16 @@ void TcpServer::Stop() {
                       << " accepted_total=" << accepted_total_.load(std::memory_order_relaxed)
                       << " rejected_total=" << rejected_total_.load(std::memory_order_relaxed);
 
+  // The loops are deliberately NOT destroyed here. Other components -- the
+  // broker's partition workers -- may still be draining requests and posting
+  // responses back through `loop(i).PostTask(...)`. Those loops are stopped,
+  // so PostTask simply returns false, but the objects must remain alive until
+  // whoever might reference them has been joined. Destruction happens in the
+  // destructor, by which point the owner has torn down its workers.
+}
+
+TcpServer::~TcpServer() {
+  Stop();
   loops_.clear();
   pools_.clear();
   loop_connections_.clear();

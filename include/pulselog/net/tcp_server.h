@@ -52,7 +52,12 @@ class TcpServer {
   // Binds, creates the loops, and starts the threads.
   [[nodiscard]] Status Start();
 
-  // Stops accepting, closes every connection, and joins every thread.
+  // Stops accepting, closes every connection, and joins every io thread.
+  //
+  // Event loops survive this call. Components that post responses onto them
+  // from their own threads (the broker's partition workers) must be joined
+  // before the server is destroyed, not merely before it is stopped -- a
+  // stopped loop safely rejects a posted task, a destroyed one does not.
   void Stop();
 
   [[nodiscard]] bool running() const noexcept { return running_.load(std::memory_order_acquire); }
