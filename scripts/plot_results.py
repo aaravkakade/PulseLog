@@ -138,9 +138,12 @@ def median_trial(result: dict) -> dict:
 
 
 def load_results(directory: Path) -> list[dict]:
+    # The results directory also holds aggregates and host metadata, which are
+    # not scenarios and have no throughput to plot.
+    skip = {"summary.json", "metadata.json", "cluster_metrics.json"}
     results = []
     for path in sorted(directory.glob("*.json")):
-        if path.name == "summary.json":
+        if path.name in skip:
             continue
         with open(path) as handle:
             try:
