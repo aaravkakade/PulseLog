@@ -14,6 +14,12 @@ namespace {
 
 constexpr std::string_view kComponent = "replication";
 
+// How often an otherwise idle replication connection is probed for liveness.
+// This bounds how long a dead follower can stay in the in-sync replica set,
+// and therefore how long a quorum write can block on a replica that is never
+// coming back.
+constexpr std::int64_t kLivenessProbeIntervalMs = 200;
+
 }  // namespace
 
 Replicator::Replicator(ReplicatorOptions options, broker::PartitionManager& partitions,
@@ -145,9 +151,11 @@ Result<std::size_t> Replicator::Sender::SendPending() {
     // first round streams from the log start -- which is exactly the
     // catch-up-after-reconnect path.
     Offset follower_offset = 0;
+    Offset follower_flushed = 0;
     for (const auto& follower : replica->Followers()) {
       if (follower.broker == peer_) {
         follower_offset = follower.log_end_offset;
+        follower_flushed = follower.flushed_offset;
         break;
       }
     }
@@ -166,29 +174,48 @@ Result<std::size_t> Replicator::Sender::SendPending() {
       follower_offset = log_start;
     }
     worst_lag = std::max(worst_lag, log_end - follower_offset);
-    if (follower_offset >= log_end) continue;  // Caught up.
+
+    // Caught up *and* durable: nothing to say.
+    //
+    // The `follower_flushed` half matters more than it looks. A follower
+    // reports its flushed offset in the response to a batch, but its own
+    // flusher runs afterwards -- so the flushed offset in that response is
+    // always stale. Without a probe, the leader would never learn that the
+    // last batch became durable on the follower, and every quorum
+    // acknowledgement would wait for its deadline instead of completing.
+    const bool caught_up = follower_offset >= log_end;
+    const bool follower_durable = follower_flushed >= log_end;
+    if (caught_up && follower_durable) continue;
 
     records_.Clear();
-    auto read = replica->log().Read(follower_offset, parent_.options_.max_bytes, records_);
-    if (!read.ok()) {
-      PL_WARN(kComponent) << "cannot read for replication"
-                          << " partition=" << replica->topic_partition().ToString()
-                          << " offset=" << follower_offset
-                          << " error=" << read.status().ToString();
-      continue;
+    std::uint32_t record_count = 0;
+    Offset base_offset = follower_offset;
+    if (!caught_up) {
+      auto read = replica->log().Read(follower_offset, parent_.options_.max_bytes, records_);
+      if (!read.ok()) {
+        PL_WARN(kComponent) << "cannot read for replication"
+                            << " partition=" << replica->topic_partition().ToString()
+                            << " offset=" << follower_offset
+                            << " error=" << read.status().ToString();
+        continue;
+      }
+      if (read->record_count == 0) continue;
+      record_count = read->record_count;
+      base_offset = read->base_offset;
     }
-    if (read->record_count == 0) continue;
+    // When `caught_up` is true this is a zero-record progress probe: it asks
+    // the follower to report its current durability without shipping data.
 
     protocol::ReplicateRequest request;
     request.topic = replica->topic_partition().topic;
     request.partition = replica->topic_partition().partition;
     request.leader_id = parent_.options_.self;
     request.leader_epoch = assignment.leader_epoch;
-    request.base_offset = read->base_offset;
-    request.prev_offset = read->base_offset - 1;
+    request.base_offset = base_offset;
+    request.prev_offset = base_offset - 1;
     request.leader_high_water_mark = replica->HighWaterMark();
     request.leader_log_start_offset = log_start;
-    request.record_count = read->record_count;
+    request.record_count = record_count;
     request.records = records_.Readable();
 
     scratch_.Clear();
@@ -248,12 +275,14 @@ Result<std::size_t> Replicator::Sender::SendPending() {
     (void)replica->OnFollowerProgress(peer_, response.log_end_offset, response.flushed_offset,
                                       now_ms);
 
+    last_success_ms_.store(now_ms, std::memory_order_relaxed);
+    if (record_count == 0) continue;  // A probe is not a batch.
+
     ++batches;
     batches_sent_.fetch_add(1, std::memory_order_relaxed);
     parent_.batches_sent_.fetch_add(1, std::memory_order_relaxed);
-    parent_.records_sent_.fetch_add(read->record_count, std::memory_order_relaxed);
-    parent_.bytes_sent_.fetch_add(read->bytes, std::memory_order_relaxed);
-    last_success_ms_.store(now_ms, std::memory_order_relaxed);
+    parent_.records_sent_.fetch_add(record_count, std::memory_order_relaxed);
+    parent_.bytes_sent_.fetch_add(records_.ReadableBytes(), std::memory_order_relaxed);
   }
 
   max_lag_records_.store(worst_lag, std::memory_order_relaxed);
@@ -294,6 +323,28 @@ void Replicator::Sender::Run() {
     }
 
     if (sent.value() > 0) continue;  // More may already be waiting.
+
+    // Liveness probe.
+    //
+    // Without this, a follower is only discovered to be dead when the leader
+    // happens to have data for it. An idle partition whose followers died
+    // would keep them in the in-sync set forever, and every quorum write
+    // would then block until its deadline waiting for replicas that are never
+    // coming back. A cheap HEALTH round trip on an otherwise idle connection
+    // turns that into a bounded eviction.
+    const std::int64_t idle_now_ms = WallClockMillis();
+    if (idle_now_ms - last_probe_ms_ >= kLivenessProbeIntervalMs) {
+      last_probe_ms_ = idle_now_ms;
+      auto probe = client_.Call(protocol::OpCode::kHealth, next_request_id_++, ByteSpan{});
+      if (!probe.ok()) {
+        PL_DEBUG(kComponent) << "liveness probe failed peer=" << peer_.value() << ": "
+                             << probe.status().ToString();
+        client_.Close();
+        connected_ = false;
+        continue;
+      }
+      last_success_ms_.store(idle_now_ms, std::memory_order_relaxed);
+    }
 
     // Nothing to send: wait for a notification from the produce path, or poll
     // at the configured interval so a missed notification costs one interval.

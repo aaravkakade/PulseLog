@@ -147,6 +147,7 @@ class Replicator {
     std::atomic<std::int64_t> last_success_ms_{0};
     std::atomic<std::int64_t> max_lag_records_{0};
     RequestId next_request_id_ = 1;
+    std::int64_t last_probe_ms_ = 0;
     ByteBuffer scratch_;
     ByteBuffer records_;
     NamedThread thread_;
