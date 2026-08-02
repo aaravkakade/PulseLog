@@ -124,7 +124,11 @@ Result<RecoveryReport> Segment::Recover(bool full_scan) {
           // The record straddles the chunk boundary; re-read from here.
           break;
         }
-        stop_reason = status.ToString();
+        // ParseRecord reports a chunk-relative offset; recovery reads in
+        // chunks, so translate it to an absolute file offset before it reaches
+        // an operator who will go looking for that byte.
+        stop_reason = status.ToString() + " (file offset " +
+                      std::to_string(position + chunk_pos) + ")";
         done = true;
         break;
       }

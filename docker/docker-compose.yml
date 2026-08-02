@@ -1,0 +1,110 @@
+# A three-broker PulseLog cluster.
+#
+#   docker compose -f docker/docker-compose.yml up --build
+#
+# Every broker is given the same `cluster.brokers` list, because partition
+# assignment is positional: a broker with a different list would compute
+# different replica placements and the cluster would disagree with itself.
+#
+# Brokers advertise their service name, not 0.0.0.0, so peers and clients
+# outside the container network can reach them by the name compose gives them.
+name: pulselog
+
+x-broker-common: &broker-common
+  build:
+    context: ..
+    dockerfile: docker/Dockerfile
+  restart: unless-stopped
+  networks: [pulselog]
+  environment:
+    # cluster.brokers is identical everywhere; only broker.id differs.
+    PULSELOG_CLUSTER__BROKERS: "1@pulselog-1:9092,2@pulselog-2:9092,3@pulselog-3:9092"
+    PULSELOG_NET__LISTEN: "0.0.0.0:9092"
+    PULSELOG_METRICS__HOST: "0.0.0.0"
+    PULSELOG_METRICS__PORT: "9644"
+    PULSELOG_BROKER__DATA__DIR: "/var/lib/pulselog"
+    PULSELOG_TOPICS__DEFAULT__PARTITIONS: "6"
+    PULSELOG_TOPICS__DEFAULT__REPLICATION__FACTOR: "3"
+    PULSELOG_LOG__LEVEL: "info"
+  healthcheck:
+    test: ["CMD", "curl", "-fsS", "http://127.0.0.1:9644/health"]
+    interval: 10s
+    timeout: 3s
+    retries: 3
+    start_period: 5s
+
+services:
+  pulselog-1:
+    <<: *broker-common
+    container_name: pulselog-1
+    hostname: pulselog-1
+    environment:
+      PULSELOG_BROKER__ID: "1"
+      PULSELOG_NET__ADVERTISED__HOST: "pulselog-1"
+      PULSELOG_NET__ADVERTISED__PORT: "9092"
+      PULSELOG_CLUSTER__BROKERS: "1@pulselog-1:9092,2@pulselog-2:9092,3@pulselog-3:9092"
+      PULSELOG_NET__LISTEN: "0.0.0.0:9092"
+      PULSELOG_METRICS__HOST: "0.0.0.0"
+      PULSELOG_METRICS__PORT: "9644"
+      PULSELOG_BROKER__DATA__DIR: "/var/lib/pulselog"
+      PULSELOG_TOPICS__DEFAULT__PARTITIONS: "6"
+      PULSELOG_TOPICS__DEFAULT__REPLICATION__FACTOR: "3"
+      PULSELOG_LOG__LEVEL: "info"
+    ports:
+      - "9092:9092"
+      - "9644:9644"
+    volumes:
+      - pulselog-1-data:/var/lib/pulselog
+
+  pulselog-2:
+    <<: *broker-common
+    container_name: pulselog-2
+    hostname: pulselog-2
+    environment:
+      PULSELOG_BROKER__ID: "2"
+      PULSELOG_NET__ADVERTISED__HOST: "pulselog-2"
+      PULSELOG_NET__ADVERTISED__PORT: "9092"
+      PULSELOG_CLUSTER__BROKERS: "1@pulselog-1:9092,2@pulselog-2:9092,3@pulselog-3:9092"
+      PULSELOG_NET__LISTEN: "0.0.0.0:9092"
+      PULSELOG_METRICS__HOST: "0.0.0.0"
+      PULSELOG_METRICS__PORT: "9644"
+      PULSELOG_BROKER__DATA__DIR: "/var/lib/pulselog"
+      PULSELOG_TOPICS__DEFAULT__PARTITIONS: "6"
+      PULSELOG_TOPICS__DEFAULT__REPLICATION__FACTOR: "3"
+      PULSELOG_LOG__LEVEL: "info"
+    ports:
+      - "9093:9092"
+      - "9645:9644"
+    volumes:
+      - pulselog-2-data:/var/lib/pulselog
+
+  pulselog-3:
+    <<: *broker-common
+    container_name: pulselog-3
+    hostname: pulselog-3
+    environment:
+      PULSELOG_BROKER__ID: "3"
+      PULSELOG_NET__ADVERTISED__HOST: "pulselog-3"
+      PULSELOG_NET__ADVERTISED__PORT: "9092"
+      PULSELOG_CLUSTER__BROKERS: "1@pulselog-1:9092,2@pulselog-2:9092,3@pulselog-3:9092"
+      PULSELOG_NET__LISTEN: "0.0.0.0:9092"
+      PULSELOG_METRICS__HOST: "0.0.0.0"
+      PULSELOG_METRICS__PORT: "9644"
+      PULSELOG_BROKER__DATA__DIR: "/var/lib/pulselog"
+      PULSELOG_TOPICS__DEFAULT__PARTITIONS: "6"
+      PULSELOG_TOPICS__DEFAULT__REPLICATION__FACTOR: "3"
+      PULSELOG_LOG__LEVEL: "info"
+    ports:
+      - "9094:9092"
+      - "9646:9644"
+    volumes:
+      - pulselog-3-data:/var/lib/pulselog
+
+volumes:
+  pulselog-1-data:
+  pulselog-2-data:
+  pulselog-3-data:
+
+networks:
+  pulselog:
+    driver: bridge
