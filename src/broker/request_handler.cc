@@ -553,7 +553,9 @@ void Broker::ExecuteProduce(WorkerRequest& request) {
   // in place is safe and needs no further copy.
   const MutableByteSpan records(const_cast<std::uint8_t*>(produce.records.data()),
                                 produce.records.size());
+  const std::int64_t append_started = MonotonicNanos();
   auto appended = replica.value()->log().AppendAssigningOffsets(records, produce.record_count);
+  const std::int64_t append_finished = MonotonicNanos();
   if (!appended.ok()) {
     RespondError(request.loop_index,
                  request.connection_id,
@@ -569,6 +571,8 @@ void Broker::ExecuteProduce(WorkerRequest& request) {
   if (replicator_) replicator_->NotifyAppend(replica.value()->topic_partition());
 
   if (metrics_) {
+    metrics_->produce_stage_queue.Record(started - request.enqueued_nanos);
+    metrics_->produce_stage_append.Record(append_finished - append_started);
     metrics_->produce_requests.Increment();
     metrics_->messages_produced.Increment(appended->record_count);
     metrics_->bytes_produced.Increment(appended->bytes);
@@ -587,29 +591,50 @@ void Broker::ExecuteProduce(WorkerRequest& request) {
   DurabilityWaiter waiter;
   waiter.required_offset = last_offset;
   waiter.mode = produce.acks;
+  waiter.added_nanos = append_finished;
   waiter.deadline_ms =
       now_ms + (produce.timeout_ms > 0 ? produce.timeout_ms : config_.replication_timeout_ms);
-  waiter.on_complete =
-      [this, loop_index, connection_id, request_id, base_offset, last_offset, append_time, started](
-          Status status, Offset high_water_mark) {
-        protocol::ProduceResponse response;
-        if (!status.ok()) {
-          response.header.error = status.code();
-          response.header.error_message = status.message();
-          if (metrics_) metrics_->failed_requests.Increment();
-        }
-        response.base_offset = base_offset;
-        response.last_offset = last_offset;
-        response.append_time = append_time;
-        response.high_water_mark = high_water_mark;
+  // The waiter is captured by reference into its own callback only through
+  // these copies; the waiter object itself is moved into the replica below.
+  const AckMode ack_mode = produce.acks;
+  waiter.on_complete = [this,
+                        loop_index,
+                        connection_id,
+                        request_id,
+                        base_offset,
+                        last_offset,
+                        append_time,
+                        started,
+                        append_finished,
+                        ack_mode](
+                           Status status, Offset high_water_mark, std::int64_t local_flush_nanos) {
+    protocol::ProduceResponse response;
+    if (!status.ok()) {
+      response.header.error = status.code();
+      response.header.error_message = status.message();
+      if (metrics_) metrics_->failed_requests.Increment();
+    }
+    response.base_offset = base_offset;
+    response.last_offset = last_offset;
+    response.append_time = append_time;
+    response.high_water_mark = high_water_mark;
 
-        ByteBuffer payload;
-        protocol::PayloadWriter writer(payload);
-        response.Encode(writer);
-        if (metrics_) metrics_->produce_latency.Record(MonotonicNanos() - started);
-        Respond(
-            loop_index, connection_id, protocol::OpCode::kProduce, request_id, std::move(payload));
-      };
+    ByteBuffer payload;
+    protocol::PayloadWriter writer(payload);
+    response.Encode(writer);
+    if (metrics_) {
+      const std::int64_t completed = MonotonicNanos();
+      metrics_->produce_latency.Record(completed - started);
+      // Only quorum writes wait on durability, and only they stamp the
+      // local-flush moment. Splitting the wait for other modes would
+      // report zeros that dilute the histogram.
+      if (ack_mode == AckMode::kQuorum && local_flush_nanos > 0) {
+        metrics_->produce_stage_local_flush.Record(local_flush_nanos - append_finished);
+        metrics_->produce_stage_replication.Record(completed - local_flush_nanos);
+      }
+    }
+    Respond(loop_index, connection_id, protocol::OpCode::kProduce, request_id, std::move(payload));
+  };
 
   replica.value()->AddWaiter(std::move(waiter), now_ms);
 }

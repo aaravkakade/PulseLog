@@ -289,6 +289,16 @@ BrokerMetrics::BrokerMetrics(MetricRegistry& reg)
           reg.GetHistogram("pulselog_queue_wait_nanos", "Time a request spent in a worker queue")),
       produce_batch_size(reg.GetHistogram(
           "pulselog_produce_batch_records", "Records per produce request", {}, 1'000'000, 3)),
+      produce_stage_queue(reg.GetHistogram("pulselog_produce_stage_queue_nanos",
+                                           "Produce: time waiting in the worker queue")),
+      produce_stage_append(reg.GetHistogram("pulselog_produce_stage_append_nanos",
+                                            "Produce: time inside the log append")),
+      produce_stage_local_flush(
+          reg.GetHistogram("pulselog_produce_stage_local_flush_nanos",
+                           "Produce: append until the leader's own data reached media")),
+      produce_stage_replication(
+          reg.GetHistogram("pulselog_produce_stage_replication_nanos",
+                           "Produce: leader flushed until a quorum had flushed")),
       active_connections(
           reg.GetGauge("pulselog_active_connections", "Currently open client connections")),
       hosted_partitions(

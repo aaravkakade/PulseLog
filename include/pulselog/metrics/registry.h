@@ -147,6 +147,16 @@ struct BrokerMetrics {
   Histogram& queue_wait;
   Histogram& produce_batch_size;
 
+  // Produce-path stage breakdown, in nanoseconds. produce_latency alone says
+  // a durable write was slow; it does not say whether the time went to the
+  // worker queue, the append, the local fsync, or waiting for followers.
+  // These four sum to roughly produce_latency, so a tail can be attributed
+  // rather than guessed at.
+  Histogram& produce_stage_queue;        // enqueue -> worker picked it up
+  Histogram& produce_stage_append;       // time inside the log append
+  Histogram& produce_stage_local_flush;  // append -> leader's own data on media
+  Histogram& produce_stage_replication;  // leader flushed -> quorum flushed
+
   // State.
   Gauge& active_connections;
   Gauge& hosted_partitions;
