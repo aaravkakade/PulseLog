@@ -50,6 +50,15 @@ void Broker::OnFrame(net::Connection& connection, const protocol::FrameDecoder::
 
   if (HandleInline(connection, frame)) return;
 
+  // Topic administration goes to a worker rather than running inline: it may
+  // have to forward to the controller over the network, and an io loop must
+  // never block on another broker.
+  if (frame.header.opcode == protocol::OpCode::kCreateTopic ||
+      frame.header.opcode == protocol::OpCode::kDeleteTopic) {
+    RouteToWorker(connection, frame, 0);
+    return;
+  }
+
   const auto worker_index = WorkerForRequest(frame);
   if (!worker_index.has_value()) {
     if (metrics_) metrics_->protocol_errors.Increment();
@@ -155,86 +164,11 @@ bool Broker::HandleInline(net::Connection& connection,
         send_error(ErrorCode::kProtocolError, "malformed metadata request");
         return true;
       }
-      // Auto-create on metadata lookup so a producer's first request against a
-      // new topic resolves a leader instead of failing.
-      if (config_.auto_create_topics) {
-        for (const auto& topic : request.topics) {
-          if (cluster_.HasTopic(topic) || !IsValidTopicName(topic)) continue;
-          metadata::TopicConfig topic_config;
-          topic_config.name = topic;
-          topic_config.partition_count = config_.default_partitions;
-          topic_config.replication_factor = config_.default_replication_factor;
-          auto created = partitions_.CreateTopic(topic_config);
-          if (!created.ok()) {
-            PL_WARN(kComponent) << "auto-create failed topic=" << topic << ": "
-                                << created.status().ToString();
-          } else {
-            const Status persisted = PersistMetadata();
-            if (!persisted.ok()) {
-              PL_ERROR(kComponent) << "metadata persist failed: " << persisted.ToString();
-            }
-          }
-        }
-      }
+      // No auto-create here. Creating a topic is the controller's job, and a
+      // metadata lookup arriving at a non-controller must not invent a
+      // second, differently-shaped definition of the same topic. Produce is
+      // where auto-create happens, on a worker thread that can forward.
       auto response = cluster_.BuildMetadataResponse(request.topics);
-      send(response);
-      return true;
-    }
-
-    case protocol::OpCode::kCreateTopic: {
-      protocol::CreateTopicRequest request;
-      protocol::PayloadReader reader(frame.payload);
-      if (!request.Decode(reader) || !reader.Complete()) {
-        send_error(ErrorCode::kProtocolError, "malformed create-topic request");
-        return true;
-      }
-      metadata::TopicConfig topic_config;
-      topic_config.name = request.topic;
-      topic_config.partition_count =
-          request.partitions > 0 ? request.partitions : config_.default_partitions;
-      topic_config.replication_factor = request.replication_factor > 0
-                                            ? request.replication_factor
-                                            : config_.default_replication_factor;
-      topic_config.retention_ms = request.retention_ms;
-      topic_config.segment_bytes = request.segment_bytes;
-      topic_config.compression = request.compression;
-
-      auto created = partitions_.CreateTopic(topic_config);
-      protocol::CreateTopicResponse response;
-      if (!created.ok()) {
-        response.header.error = created.status().code();
-        response.header.error_message = created.status().message();
-        if (metrics_) metrics_->failed_requests.Increment();
-      } else {
-        response.partitions = created->config.partition_count;
-        const Status persisted = PersistMetadata();
-        if (!persisted.ok()) {
-          PL_ERROR(kComponent) << "metadata persist failed: " << persisted.ToString();
-        }
-      }
-      send(response);
-      return true;
-    }
-
-    case protocol::OpCode::kDeleteTopic: {
-      protocol::DeleteTopicRequest request;
-      protocol::PayloadReader reader(frame.payload);
-      if (!request.Decode(reader) || !reader.Complete()) {
-        send_error(ErrorCode::kProtocolError, "malformed delete-topic request");
-        return true;
-      }
-      protocol::DeleteTopicResponse response;
-      const Status status = partitions_.DeleteTopic(request.topic, /*delete_data=*/true);
-      if (!status.ok()) {
-        response.header.error = status.code();
-        response.header.error_message = status.message();
-      } else {
-        registry_.RemoveByLabel("topic", request.topic);
-        const Status persisted = PersistMetadata();
-        if (!persisted.ok()) {
-          PL_ERROR(kComponent) << "metadata persist failed: " << persisted.ToString();
-        }
-      }
       send(response);
       return true;
     }
@@ -280,18 +214,9 @@ bool Broker::HandleInline(net::Connection& connection,
         send_error(ErrorCode::kProtocolError, "malformed join-group request");
         return true;
       }
-      // Auto-create subscribed topics so a consumer can start before any
-      // producer has written.
-      if (config_.auto_create_topics) {
-        for (const auto& topic : request.topics) {
-          if (cluster_.HasTopic(topic) || !IsValidTopicName(topic)) continue;
-          metadata::TopicConfig topic_config;
-          topic_config.name = topic;
-          topic_config.partition_count = config_.default_partitions;
-          topic_config.replication_factor = config_.default_replication_factor;
-          (void)partitions_.CreateTopic(topic_config);
-        }
-      }
+      // Subscribing to a topic that does not exist yet yields an empty
+      // assignment rather than creating it; the consumer picks up partitions
+      // once a producer (or an explicit create) brings the topic into being.
       auto response = groups_->Join(request, WallClockMillis());
       send(response);
       return true;
@@ -354,7 +279,10 @@ bool Broker::HandleInline(net::Connection& connection,
 
 void Broker::Respond(std::size_t loop_index, std::uint64_t connection_id,
                      protocol::OpCode opcode, RequestId request_id, ByteBuffer&& payload) {
-  if (loop_index >= loop_connections_.size() || server_ == nullptr) return;
+  if (server_ == nullptr || loop_index >= loop_connections_.size() ||
+      loop_index >= server_->LoopCount()) {
+    return;
+  }
 
   net::EventLoop& loop = server_->loop(loop_index);
   // The payload moves onto the io loop; it is destroyed there whether or not
@@ -395,15 +323,10 @@ Result<PartitionReplica*> Broker::ResolvePartition(const std::string& topic,
     if (!IsValidTopicName(topic)) {
       return InvalidArgument("invalid topic name '" + topic + "'");
     }
-    metadata::TopicConfig topic_config;
-    topic_config.name = topic;
-    topic_config.partition_count = std::max(config_.default_partitions, partition.value() + 1);
-    topic_config.replication_factor = config_.default_replication_factor;
-    PL_RETURN_IF_ERROR(partitions_.CreateTopic(topic_config).status());
-    const Status persisted = PersistMetadata();
-    if (!persisted.ok()) {
-      PL_ERROR(kComponent) << "metadata persist failed: " << persisted.ToString();
-    }
+    PL_RETURN_IF_ERROR(
+        EnsureTopic(topic, std::max(config_.default_partitions, partition.value() + 1),
+                    config_.default_replication_factor)
+            .status());
   }
 
   if (PartitionReplica* replica = partitions_.Find(topic_partition)) return replica;
@@ -444,11 +367,77 @@ void Broker::Execute(WorkerRequest& request) {
     case protocol::OpCode::kReplicaAck:
       ExecuteReplicaAck(request);
       break;
+    case protocol::OpCode::kCreateTopic:
+      ExecuteCreateTopic(request);
+      break;
+    case protocol::OpCode::kDeleteTopic:
+      ExecuteDeleteTopic(request);
+      break;
     default:
       RespondError(request.loop_index, request.connection_id, request.opcode, request.request_id,
                    ErrorCode::kProtocolError, "operation is not valid on a partition worker");
       break;
   }
+}
+
+void Broker::ExecuteCreateTopic(WorkerRequest& request) {
+  protocol::CreateTopicRequest create;
+  protocol::PayloadReader reader(request.payload->Readable());
+  if (!create.Decode(reader) || !reader.Complete()) {
+    RespondError(request.loop_index, request.connection_id, request.opcode, request.request_id,
+                 ErrorCode::kProtocolError, "malformed create-topic request");
+    return;
+  }
+
+  protocol::CreateTopicResponse response;
+  auto descriptor =
+      EnsureTopic(create.topic,
+                  create.partitions > 0 ? create.partitions : config_.default_partitions,
+                  create.replication_factor > 0 ? create.replication_factor
+                                                : config_.default_replication_factor,
+                  create.from_controller);
+  if (!descriptor.ok()) {
+    response.header.error = descriptor.status().code();
+    response.header.error_message = descriptor.status().message();
+    if (metrics_) metrics_->failed_requests.Increment();
+  } else {
+    response.partitions = descriptor->config.partition_count;
+  }
+
+  ByteBuffer payload;
+  protocol::PayloadWriter writer(payload);
+  response.Encode(writer);
+  Respond(request.loop_index, request.connection_id, protocol::OpCode::kCreateTopic,
+          request.request_id, std::move(payload));
+}
+
+void Broker::ExecuteDeleteTopic(WorkerRequest& request) {
+  protocol::DeleteTopicRequest remove;
+  protocol::PayloadReader reader(request.payload->Readable());
+  if (!remove.Decode(reader) || !reader.Complete()) {
+    RespondError(request.loop_index, request.connection_id, request.opcode, request.request_id,
+                 ErrorCode::kProtocolError, "malformed delete-topic request");
+    return;
+  }
+
+  protocol::DeleteTopicResponse response;
+  const Status status = partitions_.DeleteTopic(remove.topic, /*delete_data=*/true);
+  if (!status.ok()) {
+    response.header.error = status.code();
+    response.header.error_message = status.message();
+  } else {
+    registry_.RemoveByLabel("topic", remove.topic);
+    const Status persisted = PersistMetadata();
+    if (!persisted.ok()) {
+      PL_ERROR(kComponent) << "metadata persist failed: " << persisted.ToString();
+    }
+  }
+
+  ByteBuffer payload;
+  protocol::PayloadWriter writer(payload);
+  response.Encode(writer);
+  Respond(request.loop_index, request.connection_id, protocol::OpCode::kDeleteTopic,
+          request.request_id, std::move(payload));
 }
 
 void Broker::ExecuteProduce(WorkerRequest& request) {
@@ -583,6 +572,26 @@ void Broker::ExecuteFetch(WorkerRequest& request) {
                                                                         : log_end;
   }
 
+  // A position outside the log is an error, not an empty result. Returning
+  // "nothing available" would leave a consumer polling an offset that can
+  // never yield anything -- it needs to know its position is invalid.
+  if (start > log_end) {
+    RespondError(request.loop_index, request.connection_id, request.opcode, request.request_id,
+                 ErrorCode::kOutOfRange,
+                 "offset " + std::to_string(start) + " is beyond the log end " +
+                     std::to_string(log_end) + " for " + fetch.topic + "-" +
+                     std::to_string(fetch.partition.value()));
+    return;
+  }
+  if (start < log_start) {
+    RespondError(request.loop_index, request.connection_id, request.opcode, request.request_id,
+                 ErrorCode::kOutOfRange,
+                 "offset " + std::to_string(start) + " was deleted by retention; " +
+                     fetch.topic + "-" + std::to_string(fetch.partition.value()) +
+                     " now starts at " + std::to_string(log_start));
+    return;
+  }
+
   // A consumer must not see records that are not yet on a majority of
   // replicas: if the leader died, those records could vanish.
   const Offset visible_end =
@@ -714,6 +723,13 @@ void Broker::ExecuteReplicate(WorkerRequest& request) {
                                     std::to_string(replica->leader_epoch());
     response.log_end_offset = log_end;
     response.flushed_offset = replica->log().FlushedOffset();
+  } else if (replicate.record_count == 0 && replicate.base_offset == log_end) {
+    // A progress probe: the leader is asking where we are and how much of it
+    // is durable. Nothing to append.
+    response.log_end_offset = log_end;
+    response.flushed_offset = replica->log().FlushedOffset();
+    const Offset watermark = std::min(replicate.leader_high_water_mark, log_end);
+    replica->OnLeaderAppend(watermark, WallClockMillis());
   } else if (replicate.base_offset != log_end) {
     // A gap or an overlap. Reporting our log end offset lets the leader resume
     // from the right place; a duplicate resend lands here and is a no-op.
