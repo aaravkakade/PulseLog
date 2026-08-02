@@ -1,8 +1,10 @@
 // Storage engine tests: append, read, segment rolling, indexing, recovery,
 // corruption handling, truncation and retention.
 #include <algorithm>
+#include <atomic>
 #include <random>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "test_support/temp_dir.h"
@@ -634,6 +636,92 @@ TEST(PartitionLog, SyncOnAppendFlushesInline) {
   ASSERT_TRUE(log->AppendAssigningOffsets(Mutable(batch), 5).ok());
   EXPECT_EQ(log->FlushedOffset(), 5) << "sync_on_append must make the append durable";
   EXPECT_FALSE(log->NeedsFlush(0));
+}
+
+TEST(PartitionLog, ConcurrentAppendDuringFlushStaysAccountedFor) {
+  // Regression. Flush() used to end with unflushed_bytes_.store(0), which
+  // wiped the accounting for records appended while the fsync was in flight.
+  // The partition then read as clean -- NeedsFlush() false with records past
+  // flushed_offset_ -- so the flusher skipped it indefinitely, and an
+  // acks=quorum write on those records waited out its full deadline and was
+  // answered with TIMEOUT despite the data being intact on every replica.
+  //
+  // This has to be a real race: the window is between the counter read and the
+  // counter reset inside Flush(), so sequential calls cannot reach it. One
+  // thread appends while another flushes, and the invariant is checked after
+  // both stop.
+  testing::TempDir dir;
+  LogOptions options = MakeOptions(dir.path());
+  options.flush.max_unflushed_records = 1;
+  auto opened = PartitionLog::Open(TopicPartition{"t", PartitionIndex{0}}, options);
+  ASSERT_TRUE(opened.ok());
+  auto log = std::move(opened).value();
+
+  constexpr int kBatches = 400;
+  std::atomic<bool> appending{true};
+  std::atomic<int> append_failures{0};
+
+  std::thread appender([&] {
+    for (int i = 0; i < kBatches; ++i) {
+      ByteBuffer batch = MakeBatch(4, "k", 48);
+      if (!log->AppendAssigningOffsets(Mutable(batch), 4).ok()) {
+        append_failures.fetch_add(1);
+        break;
+      }
+      std::this_thread::yield();
+    }
+    appending.store(false);
+  });
+
+  // Flush continuously, exactly as the flusher thread does.
+  std::atomic<int> flush_failures{0};
+  while (appending.load()) {
+    if (!log->Flush().ok()) {
+      flush_failures.fetch_add(1);
+      break;
+    }
+    std::this_thread::yield();
+  }
+  appender.join();
+
+  ASSERT_EQ(append_failures.load(), 0);
+  ASSERT_EQ(flush_failures.load(), 0);
+  ASSERT_EQ(log->LogEndOffset(), kBatches * 4);
+
+  // The invariant the bug broke: unflushed records must keep the partition
+  // flushable, or nothing will ever come back for them.
+  if (log->FlushedOffset() < log->LogEndOffset()) {
+    EXPECT_TRUE(log->NeedsFlush(0))
+        << "log end " << log->LogEndOffset() << " is past flushed " << log->FlushedOffset()
+        << " but the partition reports nothing to flush; "
+        << "the flusher will never revisit it and a durable write would hang";
+  }
+
+  // And a final flush must actually close the gap.
+  ASSERT_TRUE(log->Flush().ok());
+  EXPECT_EQ(log->FlushedOffset(), log->LogEndOffset());
+}
+
+TEST(PartitionLog, RepeatedFlushesNeverDriveTheCounterNegative) {
+  // The fix subtracts what a flush covered instead of zeroing. Subtracting
+  // more than was added would wrap the unsigned comparison in NeedsFlush and
+  // make an idle partition look permanently dirty.
+  testing::TempDir dir;
+  LogOptions options = MakeOptions(dir.path());
+  options.flush.max_unflushed_records = 1;
+  auto opened = PartitionLog::Open(TopicPartition{"t", PartitionIndex{0}}, options);
+  ASSERT_TRUE(opened.ok());
+  auto log = std::move(opened).value();
+
+  for (int round = 0; round < 5; ++round) {
+    ByteBuffer batch = MakeBatch(3, "k", 32);
+    ASSERT_TRUE(log->AppendAssigningOffsets(Mutable(batch), 3).ok());
+    ASSERT_TRUE(log->Flush().ok());
+    ASSERT_TRUE(log->Flush().ok());  // second flush covers nothing
+    EXPECT_FALSE(log->NeedsFlush(0))
+        << "round " << round << ": a fully flushed log must not report dirty";
+  }
+  EXPECT_EQ(log->FlushedOffset(), log->LogEndOffset());
 }
 
 TEST(PartitionLog, NeedsFlushHonoursThresholds) {

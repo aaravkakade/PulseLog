@@ -470,6 +470,24 @@ bool PartitionLog::NeedsFlush(std::int64_t now_ms) const {
 }
 
 Status PartitionLog::Flush() {
+  // Read the unflushed counters *before* the target offset, and subtract
+  // exactly this much afterwards rather than storing zero.
+  //
+  // Appends run concurrently with this fsync. Storing zero at the end wipes
+  // the accounting for anything appended while the syscall was in flight, and
+  // then unflushed_bytes_ reads zero while records past flushed_offset_ remain
+  // on nobody's list: NeedsFlush() answers false, the flusher skips the
+  // partition forever, and if no further append arrives to bump the counter
+  // back above zero, an acks=quorum write on those records waits out its full
+  // deadline and is answered with TIMEOUT despite the data being intact on
+  // every replica.
+  //
+  // Reading the counters first bounds the error in the safe direction: they
+  // can only under-count what the fsync ends up covering, so at worst one
+  // extra flush runs and finds nothing to do.
+  const std::int64_t bytes_covered = unflushed_bytes_.load(std::memory_order_relaxed);
+  const std::int64_t records_covered = unflushed_records_.load(std::memory_order_relaxed);
+
   // The offset is captured before the fsync so `flushed_offset` never claims
   // more than what the syscall actually covered.
   const Offset target = log_end_offset_.load(std::memory_order_acquire);
@@ -487,8 +505,8 @@ Status PartitionLog::Flush() {
   const auto elapsed = static_cast<std::uint64_t>(MonotonicNanos() - started);
 
   flushed_offset_.store(target, std::memory_order_release);
-  unflushed_bytes_.store(0, std::memory_order_relaxed);
-  unflushed_records_.store(0, std::memory_order_relaxed);
+  unflushed_bytes_.fetch_sub(bytes_covered, std::memory_order_relaxed);
+  unflushed_records_.fetch_sub(records_covered, std::memory_order_relaxed);
   last_flush_ms_.store(MonotonicNanos() / 1'000'000, std::memory_order_relaxed);
 
   flush_count_.fetch_add(1, std::memory_order_relaxed);
