@@ -1,0 +1,113 @@
+{
+  "_comment": [
+    "The benchmark suite's configuration, version-controlled so a result can be",
+    "traced to the exact parameters that produced it. scripts/run_benchmarks.py",
+    "reads this file; changing a number here changes what gets published, and",
+    "the diff shows up in review rather than hiding in someone's shell history.",
+    "",
+    "record_counts are chosen so each scenario runs for a few seconds: long",
+    "enough that start-up effects are amortised, short enough that the whole",
+    "suite finishes in minutes. The 'quick' value is for sanity runs only and",
+    "must never be used for published numbers -- too short to be stable.",
+    "",
+    "Fields:",
+    "  brokers        broker processes to start (>1 starts a real cluster)",
+    "  replication    replication factor for the topic",
+    "  durable        run brokers with a tight flush interval, so an acks=quorum",
+    "                 result measures the engine rather than the flush timer",
+    "  broker_flags   extra broker flags; used where the flag changes what a",
+    "                 measurement *means* (fsync mode) rather than tuning it",
+    "  driver         which pulselog-bench scenario to run"
+  ],
+
+  "version": 1,
+  "warmup_records": 10000,
+  "default_trials": 5,
+
+  "scenarios": [
+    {
+      "name": "01-single-producer-no-replication",
+      "description": "One producer, one broker, one partition, no replication",
+      "records": {"full": 200000, "quick": 40000},
+      "args": {"partitions": 1, "producers": 1, "record-size": 128, "batch-size": 100, "acks": "leader"}
+    },
+    {
+      "name": "02-multi-producer-one-partition",
+      "description": "Four producers contending on a single partition",
+      "records": {"full": 200000, "quick": 40000},
+      "args": {"partitions": 1, "producers": 4, "record-size": 128, "batch-size": 100, "acks": "leader"}
+    },
+    {
+      "name": "03-multi-producer-multi-partition",
+      "description": "Four producers across eight partitions",
+      "records": {"full": 400000, "quick": 60000},
+      "args": {"partitions": 8, "producers": 4, "record-size": 128, "batch-size": 100, "acks": "leader"}
+    },
+    {
+      "name": "04-concurrent-producers-consumers",
+      "description": "Producers and consumers running at the same time",
+      "records": {"full": 200000, "quick": 40000},
+      "driver": "produce-consume",
+      "args": {"partitions": 4, "producers": 4, "consumers": 2, "record-size": 128, "batch-size": 100, "acks": "leader"}
+    },
+    {
+      "name": "05-leader-ack",
+      "description": "acks=leader, the default durability level",
+      "records": {"full": 200000, "quick": 40000},
+      "args": {"partitions": 4, "producers": 4, "record-size": 128, "batch-size": 100, "acks": "leader"}
+    },
+    {
+      "name": "06-quorum-ack",
+      "description": "acks=quorum: a majority must have persisted the record",
+      "records": {"full": 40000, "quick": 10000},
+      "durable": true,
+      "args": {"partitions": 4, "producers": 4, "record-size": 128, "batch-size": 100, "acks": "quorum"}
+    },
+    {
+      "name": "07-replication-under-load",
+      "description": "Three brokers, replication factor 3, sustained produce",
+      "records": {"full": 200000, "quick": 40000},
+      "brokers": 3,
+      "replication": 3,
+      "args": {"partitions": 6, "producers": 4, "record-size": 128, "batch-size": 100, "acks": "leader"}
+    },
+    {
+      "name": "08-no-batching",
+      "description": "Batch size 1: the cost the batching path is measured against",
+      "records": {"full": 60000, "quick": 20000},
+      "args": {"partitions": 4, "producers": 4, "record-size": 128, "batch-size": 1, "acks": "leader"}
+    },
+    {
+      "name": "09-small-message",
+      "description": "16-byte values, where per-record framing dominates",
+      "records": {"full": 400000, "quick": 60000},
+      "args": {"partitions": 4, "producers": 4, "record-size": 16, "batch-size": 200, "acks": "leader"}
+    },
+    {
+      "name": "10-large-message",
+      "description": "64 KiB values, where the disk and the socket dominate",
+      "records": {"full": 20000, "quick": 5000},
+      "args": {"partitions": 4, "producers": 4, "record-size": 65536, "batch-size": 4, "acks": "leader"}
+    },
+    {
+      "name": "11-acks-none",
+      "description": "acks=none: no durability guarantee, the throughput ceiling",
+      "records": {"full": 400000, "quick": 60000},
+      "args": {"partitions": 4, "producers": 4, "record-size": 128, "batch-size": 100, "acks": "none"}
+    },
+    {
+      "name": "12-fsync-full-vs-data",
+      "description": "acks=leader with fsync mode 'data' rather than 'full'",
+      "records": {"full": 400000, "quick": 60000},
+      "broker_flags": ["--storage.fsync.mode=data"],
+      "args": {"partitions": 4, "producers": 4, "record-size": 128, "batch-size": 100, "acks": "leader"}
+    },
+    {
+      "name": "13-baseline-mutex-queue",
+      "description": "In-process mutex-protected queue: no network, no protocol, no disk",
+      "records": {"full": 400000, "quick": 60000},
+      "driver": "baseline-mutex",
+      "args": {"producers": 4, "record-size": 128}
+    }
+  ]
+}

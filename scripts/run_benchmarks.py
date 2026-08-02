@@ -62,97 +62,37 @@ class Scenario:
     broker_flags: list = field(default_factory=list)
 
 
-def build_scenarios(quick: bool) -> list[Scenario]:
-    # Record counts are chosen so each scenario runs for a few seconds: long
-    # enough that start-up effects are amortised, short enough that the whole
-    # suite finishes in minutes.
-    n = (lambda full, small: small if quick else full)
+DEFAULT_CONFIG = Path(__file__).resolve().parent.parent / "benchmarks" / "config" / "release.json"
 
-    return [
-        Scenario(
-            "01-single-producer-no-replication",
-            "One producer, one broker, one partition, no replication",
-            {"partitions": 1, "producers": 1, "records": n(200_000, 40_000),
-             "record-size": 128, "batch-size": 100, "acks": "leader"},
-        ),
-        Scenario(
-            "02-multi-producer-one-partition",
-            "Four producers contending on a single partition",
-            {"partitions": 1, "producers": 4, "records": n(200_000, 40_000),
-             "record-size": 128, "batch-size": 100, "acks": "leader"},
-        ),
-        Scenario(
-            "03-multi-producer-multi-partition",
-            "Four producers across eight partitions",
-            {"partitions": 8, "producers": 4, "records": n(400_000, 60_000),
-             "record-size": 128, "batch-size": 100, "acks": "leader"},
-        ),
-        Scenario(
-            "04-concurrent-producers-consumers",
-            "Producers and consumers running at the same time",
-            {"partitions": 4, "producers": 4, "consumers": 2,
-             "records": n(200_000, 40_000), "record-size": 128,
-             "batch-size": 100, "acks": "leader"},
-            scenario="produce-consume",
-        ),
-        Scenario(
-            "05-leader-ack",
-            "acks=leader, the default durability level",
-            {"partitions": 4, "producers": 4, "records": n(200_000, 40_000),
-             "record-size": 128, "batch-size": 100, "acks": "leader"},
-        ),
-        Scenario(
-            "06-quorum-ack",
-            "acks=quorum: a majority must have persisted the record",
-            {"partitions": 4, "producers": 4, "records": n(40_000, 10_000),
-             "record-size": 128, "batch-size": 100, "acks": "quorum"},
-            durable=True,
-        ),
-        Scenario(
-            "07-replication-under-load",
-            "Three brokers, replication factor 3, sustained produce",
-            {"partitions": 6, "producers": 4, "records": n(200_000, 40_000),
-             "record-size": 128, "batch-size": 100, "acks": "leader"},
-            brokers=3, replication=3,
-        ),
-        Scenario(
-            "08-no-batching",
-            "Batch size 1: the cost the batching path is measured against",
-            {"partitions": 4, "producers": 4, "records": n(60_000, 20_000),
-             "record-size": 128, "batch-size": 1, "acks": "leader"},
-        ),
-        Scenario(
-            "09-small-message",
-            "16-byte values, where per-record framing dominates",
-            {"partitions": 4, "producers": 4, "records": n(400_000, 60_000),
-             "record-size": 16, "batch-size": 200, "acks": "leader"},
-        ),
-        Scenario(
-            "10-large-message",
-            "64 KiB values, where the disk and the socket dominate",
-            {"partitions": 4, "producers": 4, "records": n(20_000, 5_000),
-             "record-size": 65536, "batch-size": 4, "acks": "leader"},
-        ),
-        Scenario(
-            "11-acks-none",
-            "acks=none: no durability guarantee, the throughput ceiling",
-            {"partitions": 4, "producers": 4, "records": n(400_000, 60_000),
-             "record-size": 128, "batch-size": 100, "acks": "none"},
-        ),
-        Scenario(
-            "12-fsync-full-vs-data",
-            "acks=leader with fsync mode 'data' rather than 'full'",
-            {"partitions": 4, "producers": 4, "records": n(400_000, 60_000),
-             "record-size": 128, "batch-size": 100, "acks": "leader"},
-            broker_flags=["--storage.fsync.mode=data"],
-        ),
-        Scenario(
-            "13-baseline-mutex-queue",
-            "In-process mutex-protected queue: no network, no protocol, no disk",
-            {"producers": 4, "records": n(400_000, 60_000), "record-size": 128},
-            scenario="baseline-mutex",
-        ),
-    ]
+
+def build_scenarios(quick: bool, config_path: Path = DEFAULT_CONFIG) -> tuple[list[Scenario], dict]:
+    """Load the scenario list from the version-controlled config.
+
+    The parameters live in benchmarks/config/release.json rather than in this
+    file so that a published number can be traced to a reviewable diff instead
+    of to whatever the script happened to say that day.
+    """
+    with open(config_path) as handle:
+        config = json.load(handle)
+
+    key = "quick" if quick else "full"
+    scenarios = []
+    for entry in config["scenarios"]:
+        args = dict(entry["args"])
+        args["records"] = entry["records"][key]
+        scenarios.append(
+            Scenario(
+                entry["name"],
+                entry["description"],
+                args,
+                brokers=entry.get("brokers", 1),
+                replication=entry.get("replication", 1),
+                scenario=entry.get("driver", "produce"),
+                durable=entry.get("durable", False),
+                broker_flags=list(entry.get("broker_flags", [])),
+            )
+        )
+    return scenarios, config
 
 
 class BrokerCluster:
@@ -348,6 +288,8 @@ def main() -> int:
                         help="comma-separated substrings; run only matching scenarios")
     parser.add_argument("--quick", action="store_true",
                         help="smaller record counts, for a fast sanity run")
+    parser.add_argument("--config", default=DEFAULT_CONFIG, type=Path,
+                        help="version-controlled scenario definitions")
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args()
 
@@ -363,7 +305,10 @@ def main() -> int:
 
     args.out.mkdir(parents=True, exist_ok=True)
 
-    scenarios = build_scenarios(args.quick)
+    scenarios, config = build_scenarios(args.quick, args.config)
+    if args.quick:
+        print("warning: --quick shortens every run; not valid for published numbers",
+              file=sys.stderr)
     if args.only:
         wanted = [s.strip() for s in args.only.split(",") if s.strip()]
         scenarios = [s for s in scenarios if any(w in s.name for w in wanted)]
