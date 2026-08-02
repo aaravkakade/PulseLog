@@ -9,3 +9,4 @@ endfunction()
 
 pulselog_add_app(pulselog-broker SOURCES broker/main.cc DEPS pulselog::broker)
 pulselog_add_app(pulselog-cli SOURCES cli/main.cc DEPS pulselog::client)
+pulselog_add_app(pulselog-bench SOURCES benchmark/main.cc DEPS pulselog::client pulselog::metrics)
