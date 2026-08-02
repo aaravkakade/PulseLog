@@ -83,6 +83,11 @@ Result<BrokerConfig> BrokerConfig::FromStore(const ConfigStore& store) {
                            write_mode + "'");
   }
 
+  const std::string sync_mode = store.GetString("storage.fsync.mode", "full");
+  if (!storage::ParseSyncMode(sync_mode, config.sync_mode)) {
+    return InvalidArgument("storage.fsync.mode must be full or data; got '" + sync_mode + "'");
+  }
+
   PL_CONFIG_BOOL(config.flush.sync_on_append, "storage.flush.sync.on.append", false);
   PL_CONFIG_MS(config.flush.interval_ms, "storage.flush.interval", 200);
   PL_CONFIG_BYTES(config.flush.max_unflushed_bytes, "storage.flush.max.bytes", 4LL * 1024 * 1024);
@@ -176,6 +181,7 @@ std::string BrokerConfig::Describe() const {
       << "storage.segment.bytes=" << segment_bytes << '\n'
       << "storage.index.interval.bytes=" << index_interval_bytes << '\n'
       << "storage.write.mode=" << storage::WriteModeName(write_mode) << '\n'
+      << "storage.fsync.mode=" << storage::SyncModeName(sync_mode) << '\n'
       << "storage.preallocate=" << (preallocate_segments ? "true" : "false") << '\n'
       << "storage.flush.sync.on.append=" << (flush.sync_on_append ? "true" : "false") << '\n'
       << "storage.flush.interval=" << flush.interval_ms << "ms\n"
@@ -207,6 +213,7 @@ storage::LogOptions BrokerConfig::LogOptionsFor(const std::string& topic, Partit
   options.min_free_disk_bytes = min_free_disk_bytes;
   options.preallocate = preallocate_segments;
   options.write_mode = write_mode;
+  options.sync_mode = sync_mode;
   options.flush = flush;
   return options;
 }

@@ -55,6 +55,7 @@ struct BrokerConfig {
   std::int64_t min_free_disk_bytes = 64LL * 1024 * 1024;
   bool preallocate_segments = true;
   storage::WriteMode write_mode = storage::WriteMode::kWrite;
+  storage::SyncMode sync_mode = storage::SyncMode::kFull;
   storage::FlushPolicy flush;
   std::int64_t flusher_interval_ms = 20;
 

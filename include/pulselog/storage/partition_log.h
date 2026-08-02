@@ -54,6 +54,7 @@ struct LogOptions {
   std::int64_t min_free_disk_bytes = 64LL * 1024 * 1024;
   bool preallocate = true;
   WriteMode write_mode = WriteMode::kWrite;
+  SyncMode sync_mode = SyncMode::kFull;
   FlushPolicy flush;
 };
 

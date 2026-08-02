@@ -46,6 +46,7 @@ struct SegmentOptions {
   std::int64_t index_interval_bytes = 4096;
   bool preallocate = true;
   WriteMode write_mode = WriteMode::kWrite;
+  SyncMode sync_mode = SyncMode::kFull;
 };
 
 // What a recovery scan found.

@@ -33,6 +33,28 @@ std::string_view WriteModeName(WriteMode mode) noexcept {
   return "unknown";
 }
 
+std::string_view SyncModeName(SyncMode mode) noexcept {
+  switch (mode) {
+    case SyncMode::kFull:
+      return "full";
+    case SyncMode::kData:
+      return "data";
+  }
+  return "unknown";
+}
+
+bool ParseSyncMode(std::string_view text, SyncMode& out) noexcept {
+  if (text == "full" || text == "fullfsync") {
+    out = SyncMode::kFull;
+    return true;
+  }
+  if (text == "data" || text == "fdatasync") {
+    out = SyncMode::kData;
+    return true;
+  }
+  return false;
+}
+
 bool ParseWriteMode(std::string_view text, WriteMode& out) noexcept {
   if (text == "write") {
     out = WriteMode::kWrite;
@@ -164,17 +186,29 @@ Status FileHandle::ReadExactAt(std::uint8_t* dst, std::size_t size, std::uint64_
   return OkStatus();
 }
 
-Status FileHandle::Sync() const {
+Status FileHandle::Sync(SyncMode mode) const {
 #if defined(__APPLE__)
   // On macOS, fsync only pushes data to the drive's cache. F_FULLFSYNC asks
   // the drive to commit to stable media, which is what "durable" has to mean
   // for a log. It is markedly slower, and that cost is real, not incidental --
   // see the flush-latency numbers in docs/PERFORMANCE_RESULTS.md.
-  if (::fcntl(fd_, F_FULLFSYNC) == 0) return OkStatus();
-  // Some filesystems (and every network mount) reject F_FULLFSYNC; fall back.
-  if (errno != ENOTSUP && errno != EINVAL) {
-    return ErrnoToStatus("fcntl(F_FULLFSYNC)", errno);
+  if (mode == SyncMode::kFull) {
+    if (::fcntl(fd_, F_FULLFSYNC) == 0) return OkStatus();
+    // Some filesystems (and every network mount) reject F_FULLFSYNC; fall back.
+    if (errno != ENOTSUP && errno != EINVAL) {
+      return ErrnoToStatus("fcntl(F_FULLFSYNC)", errno);
+    }
   }
+#elif defined(__linux__)
+  if (mode == SyncMode::kData) {
+    while (::fdatasync(fd_) != 0) {
+      if (errno == EINTR) continue;
+      return ErrnoToStatus("fdatasync", errno);
+    }
+    return OkStatus();
+  }
+#else
+  (void)mode;
 #endif
   while (::fsync(fd_) != 0) {
     if (errno == EINTR) continue;

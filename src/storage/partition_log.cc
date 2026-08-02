@@ -63,6 +63,7 @@ Status PartitionLog::LoadSegments(RecoveryReport* recovery_out) {
   segment_options.index_interval_bytes = options_.index_interval_bytes;
   segment_options.preallocate = options_.preallocate;
   segment_options.write_mode = options_.write_mode;
+  segment_options.sync_mode = options_.sync_mode;
 
   if (base_offsets.empty()) {
     PL_ASSIGN_OR_RETURN(auto segment, Segment::Open(options_.directory, 0, segment_options));
@@ -185,6 +186,7 @@ Status PartitionLog::RollSegment() {
   segment_options.index_interval_bytes = options_.index_interval_bytes;
   segment_options.preallocate = options_.preallocate;
   segment_options.write_mode = options_.write_mode;
+  segment_options.sync_mode = options_.sync_mode;
 
   PL_ASSIGN_OR_RETURN(auto segment, Segment::Open(options_.directory, next_base, segment_options));
 

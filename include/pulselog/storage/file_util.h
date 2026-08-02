@@ -36,6 +36,33 @@ enum class WriteMode : std::uint8_t {
 
 [[nodiscard]] std::string_view WriteModeName(WriteMode mode) noexcept;
 
+// How hard a flush pushes.
+//
+//   kFull  On macOS this is F_FULLFSYNC, which asks the drive to commit to
+//          stable media. It is the only mode on that platform where "flushed"
+//          survives power loss, so it is the default and it is what quorum
+//          acknowledgements are defined against. On Linux it is fsync(2).
+//   kData  fdatasync(2) on Linux, fsync(2) on macOS. Data has left the page
+//          cache and reached the device, which may still hold it in a
+//          volatile write cache. Survives a process crash; a power cut may
+//          still lose it.
+//
+// This is not a micro-optimisation knob. On this project's macOS test machine,
+// background F_FULLFSYNC stalls concurrent appends to the same file badly
+// enough to cut produce throughput from ~4.7M to ~1.8M records/s and push p99
+// from 154 us to ~3 ms (docs/PERFORMANCE_RESULTS.md). The stall is in the
+// filesystem, not in this code -- appends take no lock that a flush holds --
+// so the only honest response is to make the trade explicit rather than pick
+// silently.
+enum class SyncMode : std::uint8_t {
+  kFull = 0,
+  kData = 1,
+};
+
+[[nodiscard]] std::string_view SyncModeName(SyncMode mode) noexcept;
+
+[[nodiscard]] bool ParseSyncMode(std::string_view text, SyncMode& out) noexcept;
+
 [[nodiscard]] bool ParseWriteMode(std::string_view text, WriteMode& out) noexcept;
 
 // An owning file descriptor. Move-only; closes on destruction.
@@ -88,7 +115,8 @@ class FileHandle {
   [[nodiscard]] Result<std::size_t> ReadAt(std::uint8_t* dst, std::size_t size,
                                            std::uint64_t offset) const;
 
-  [[nodiscard]] Status Sync() const;
+  // Flushes according to `mode`. See SyncMode for what each one promises.
+  [[nodiscard]] Status Sync(SyncMode mode = SyncMode::kFull) const;
 
   // fdatasync where available: skips the metadata flush when only file data
   // changed, which is the common case for an append-only log whose size the
