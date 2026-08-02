@@ -45,6 +45,39 @@ repository on the machine described in
 * **A benchmark suite** producing machine-readable JSON and charts, plus
   failure-injection tooling that asserts documented behaviour
 
+### Status of each claim
+
+Because "supports X" can mean four different things, this table says which one
+applies. **Measured** means a number in
+[PERFORMANCE_RESULTS.md](docs/PERFORMANCE_RESULTS.md) produced by running the
+code; **verified** means an automated test asserts the behaviour; **implemented**
+means it works and is exercised, but no number or dedicated test isolates it.
+
+| Capability | Status | Evidence |
+|---|---|---|
+| Partitioned topics, key routing, per-partition ordering | verified | unit + integration tests |
+| Segmented log, sparse indexes, CRC-32C, retention | measured | 18× offset lookup, 16× log read |
+| Crash recovery from a torn tail | measured + verified | 0.052 s for 205k records; failure-injection suite |
+| Leader/follower replication, high-water mark, ISR | measured + verified | 1.02M records/s at RF=3; cluster failure suite |
+| Quorum acknowledgement (durable) | measured + verified | 224k records/s, p99 3.0 ms on Linux |
+| `acks=none` / `acks=leader` (memory-backed) | measured | 2.22M / 2.19M records/s, indistinguishable — see below |
+| Consumer groups, assignment, heartbeats, offset commits | verified | integration tests + Linux smoke test |
+| Group coordinator routing | verified | regression test after a real bug |
+| Binary protocol, dual checksums, 17 opcodes | verified | round-trip and malformed-frame tests |
+| epoll backend | measured + verified | CI asserts `poller=epoll`; all Linux numbers |
+| kqueue backend | implemented | used for all local development; not covered by CI |
+| Two-level backpressure | verified | bounded-memory assertions under overload |
+| Prometheus metrics, dashboard | implemented | scraped by the benchmark tooling |
+| Raft, leader election | **design sketch only** | [REPLICATION.md §5](docs/REPLICATION.md) — not implemented |
+| `io_uring` backend | **not implemented** | — |
+
+**`acks=leader` is not a durability guarantee.** It means the record is in the
+leader's log, not that it reached the disk — which is why it measures the same
+as `acks=none` (2.19M vs 2.22M records/s, inside the spread). Only `acks=quorum`
+waits for a flush on a majority, and it costs about 10× the throughput. The
+three levels and what each actually promises are in
+[FAILURE_SEMANTICS.md](docs/FAILURE_SEMANTICS.md).
+
 ## What it does not do
 
 Stated up front so nothing here has to be inferred:
