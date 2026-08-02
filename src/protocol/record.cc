@@ -59,10 +59,14 @@ std::size_t WriteVarUInt(std::uint8_t* dst, std::uint64_t v) noexcept {
 std::size_t EncodedRecordSize(bool key_is_null,
                               std::size_t key_len,
                               std::size_t value_len) noexcept {
-  const std::uint64_t key_field = key_is_null ? 0 : static_cast<std::uint64_t>(key_len) + 1;
-  return kRecordFixedPrefix + VarUIntSize(key_field) +
-         VarUIntSize(static_cast<std::uint64_t>(value_len)) + (key_is_null ? 0 : key_len) +
-         value_len;
+  // No explicit casts to std::uint64_t here: on 64-bit Linux std::size_t *is*
+  // std::uint64_t, so a static_cast is a no-op that GCC rejects under
+  // -Wuseless-cast. The implicit conversion is a widening (or identity)
+  // unsigned conversion, which is well-defined and warning-free on both
+  // platforms.
+  const std::uint64_t key_field = key_is_null ? 0 : key_len + 1;
+  return kRecordFixedPrefix + VarUIntSize(key_field) + VarUIntSize(value_len) +
+         (key_is_null ? 0 : key_len) + value_len;
 }
 
 std::size_t AppendRecord(ByteBuffer& out,
@@ -82,9 +86,9 @@ std::size_t AppendRecord(ByteBuffer& out,
   dst[kOffAttributes] = attributes;
 
   std::size_t pos = kVarintStart;
-  const std::uint64_t key_field = key_is_null ? 0 : static_cast<std::uint64_t>(key.size()) + 1;
+  const std::uint64_t key_field = key_is_null ? 0 : key.size() + 1;
   pos += WriteVarUInt(dst + pos, key_field);
-  pos += WriteVarUInt(dst + pos, static_cast<std::uint64_t>(value.size()));
+  pos += WriteVarUInt(dst + pos, value.size());
   if (!key_is_null && !key.empty()) {
     std::memcpy(dst + pos, key.data(), key.size());
     pos += key.size();

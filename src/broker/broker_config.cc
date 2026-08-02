@@ -9,25 +9,25 @@ namespace {
 
 // Reads an integer key, propagating a parse failure instead of silently
 // defaulting. Every getter below follows this pattern.
-#define PL_CONFIG_INT(target, key, fallback)                 \
-  do {                                                       \
-    auto value = store.GetInt(key, fallback);                \
-    if (!value.ok()) return value.status();                  \
-    (target) = static_cast<decltype(target)>(value.value()); \
+#define PL_CONFIG_INT(target, key, fallback)            \
+  do {                                                  \
+    auto value = store.GetInt(key, fallback);           \
+    if (!value.ok()) return value.status();             \
+    (target) = Narrow<decltype(target)>(value.value()); \
   } while (false)
 
-#define PL_CONFIG_BYTES(target, key, fallback)               \
-  do {                                                       \
-    auto value = store.GetBytes(key, fallback);              \
-    if (!value.ok()) return value.status();                  \
-    (target) = static_cast<decltype(target)>(value.value()); \
+#define PL_CONFIG_BYTES(target, key, fallback)          \
+  do {                                                  \
+    auto value = store.GetBytes(key, fallback);         \
+    if (!value.ok()) return value.status();             \
+    (target) = Narrow<decltype(target)>(value.value()); \
   } while (false)
 
-#define PL_CONFIG_MS(target, key, fallback)                  \
-  do {                                                       \
-    auto value = store.GetDurationMs(key, fallback);         \
-    if (!value.ok()) return value.status();                  \
-    (target) = static_cast<decltype(target)>(value.value()); \
+#define PL_CONFIG_MS(target, key, fallback)             \
+  do {                                                  \
+    auto value = store.GetDurationMs(key, fallback);    \
+    if (!value.ok()) return value.status();             \
+    (target) = Narrow<decltype(target)>(value.value()); \
   } while (false)
 
 #define PL_CONFIG_BOOL(target, key, fallback)  \

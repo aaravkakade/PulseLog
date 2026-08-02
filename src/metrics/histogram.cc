@@ -5,6 +5,8 @@
 #include <cmath>
 #include <sstream>
 
+#include "pulselog/base/types.h"
+
 namespace pulselog::metrics {
 namespace {
 
@@ -51,7 +53,7 @@ Histogram::Histogram(std::int64_t max_trackable, int significant_digits)
 std::size_t Histogram::IndexFor(std::int64_t value) const noexcept {
   const auto masked = static_cast<std::uint64_t>(value | sub_bucket_mask_);
   const std::int32_t bucket_index =
-      leading_zero_count_base_ - static_cast<std::int32_t>(std::countl_zero(masked));
+      leading_zero_count_base_ - ::pulselog::Narrow<std::int32_t>(std::countl_zero(masked));
   const std::int32_t sub_bucket_index = static_cast<std::int32_t>(value >> bucket_index);
 
   // The low half of every bucket above zero repeats the previous bucket, so

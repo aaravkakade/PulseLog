@@ -139,7 +139,9 @@ std::vector<PartitionAssignment> ClusterMetadata::ComputeAssignments(
       std::min<std::size_t>(static_cast<std::size_t>(config.replication_factor), broker_count);
   // Offsetting by a hash of the topic name stops every topic from putting its
   // partition-0 leader on the same broker.
-  const std::uint32_t topic_offset = Crc32c(AsBytes(config.name)) % broker_count;
+  // size_t throughout: the offset is only ever used as an index into the
+  // broker list, and computing it in uint32_t narrows the modulus result.
+  const std::size_t topic_offset = Crc32c(AsBytes(config.name)) % broker_count;
 
   for (std::int32_t p = 0; p < config.partition_count; ++p) {
     PartitionAssignment assignment;

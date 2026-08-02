@@ -132,6 +132,20 @@ enum class Compression : std::uint8_t {
 
 inline constexpr std::size_t kMaxTopicNameLength = 200;
 
+// Explicit integer conversion that survives both platforms' warning sets.
+//
+// The obvious spelling is a plain static_cast, but the *same* cast is required
+// on one platform and rejected on the other: std::size_t and std::uint64_t are
+// distinct types on macOS (unsigned long vs unsigned long long) and identical
+// on 64-bit Linux, so Apple clang needs the cast for -Wconversion while GCC
+// rejects it under -Wuseless-cast. Routing the conversion through a template
+// keeps the types dependent, which suppresses -Wuseless-cast, while leaving
+// the narrowing explicit and greppable.
+template<typename To, typename From>
+[[nodiscard]] constexpr To Narrow(From value) noexcept {
+  return static_cast<To>(value);
+}
+
 // Cache line size on the target platforms (64 B on x86-64 and Apple silicon's
 // 128 B L1 line is handled by padding to 128 where measured to matter).
 inline constexpr std::size_t kCacheLineSize = 64;

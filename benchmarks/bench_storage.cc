@@ -196,7 +196,7 @@ BENCHMARK(BM_LogRead)->Arg(4096)->Arg(65536)->Arg(1 << 20)->Unit(benchmark::kMic
 void BM_OffsetLookup(benchmark::State& state) {
   TempDirectory dir;
   auto options = MakeOptions(dir.path(), storage::WriteMode::kWrite, false);
-  options.index_interval_bytes = static_cast<std::int64_t>(state.range(0));
+  options.index_interval_bytes = Narrow<std::int64_t>(state.range(0));
   auto log = storage::PartitionLog::Open(TopicPartition{"bench", PartitionIndex{0}}, options);
   if (!log.ok()) {
     state.SkipWithError(log.status().ToString().c_str());

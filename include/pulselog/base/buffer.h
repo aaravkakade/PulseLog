@@ -83,13 +83,20 @@ class ByteBuffer {
     if (storage_.size() < capacity) storage_.resize(capacity);
   }
 
+  // The empty check is not an optimisation. std::memcpy has undefined
+  // behaviour when either pointer is null, *even when the length is zero*, and
+  // an empty ByteSpan routinely carries a null data(). UndefinedBehaviorSanitizer
+  // on Linux flags it ("null pointer passed as argument 2, which is declared to
+  // never be null"); the macOS build happened not to hit the same call sites.
   void Append(ByteSpan data) {
+    if (data.empty()) return;
     EnsureWritable(data.size());
     std::memcpy(WritePtr(), data.data(), data.size());
     Commit(data.size());
   }
 
   void Append(const void* data, std::size_t size) {
+    if (size == 0 || data == nullptr) return;
     EnsureWritable(size);
     std::memcpy(WritePtr(), data, size);
     Commit(size);

@@ -362,7 +362,11 @@ Result<std::uint64_t> AvailableBytes(const std::filesystem::path& path) {
   if (::statvfs(path.c_str(), &stat) != 0) {
     return ErrnoToStatus("statvfs " + path.string(), errno);
   }
-  return static_cast<std::uint64_t>(stat.f_bavail) * stat.f_frsize;
+  // Widened through named locals rather than casts: the field types differ
+  // between platforms, so a cast is required on one and useless on the other.
+  const std::uint64_t available_blocks = stat.f_bavail;
+  const std::uint64_t block_size = stat.f_frsize;
+  return available_blocks * block_size;
 }
 
 }  // namespace pulselog::storage

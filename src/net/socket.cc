@@ -86,6 +86,17 @@ Result<Endpoint> EndpointFromSockaddr(const ::sockaddr_storage& addr) {
   return endpoint;
 }
 
+// EAGAIN and EWOULDBLOCK are required to be distinct by POSIX but are the same
+// value on Linux and on macOS. Testing both is the portable idiom; writing it
+// as `a == EAGAIN || a == EWOULDBLOCK` makes GCC report a tautological 'or'.
+[[nodiscard]] bool IsWouldBlock(int err) noexcept {
+#if defined(EWOULDBLOCK) && EWOULDBLOCK != EAGAIN
+  return err == EAGAIN || err == EWOULDBLOCK;
+#else
+  return err == EAGAIN;
+#endif
+}
+
 // macOS has no MSG_NOSIGNAL; it uses a per-socket option instead. Without one
 // of the two, writing to a socket the peer has closed raises SIGPIPE and kills
 // the process -- which a broker must never do just because a client vanished.
@@ -264,7 +275,7 @@ Result<TcpSocket> TcpSocket::Accept(bool& would_block, Endpoint* peer) const {
   } while (client < 0 && errno == EINTR);
 
   if (client < 0) {
-    if (errno == EAGAIN || errno == EWOULDBLOCK) {
+    if (IsWouldBlock(errno)) {
       would_block = true;
       return TcpSocket{};
     }
@@ -306,7 +317,7 @@ Result<TransferResult> TcpSocket::ReadInto(ByteBuffer& buffer, std::size_t max_b
     result.eof = true;
     return result;
   }
-  if (errno == EAGAIN || errno == EWOULDBLOCK) {
+  if (IsWouldBlock(errno)) {
     result.would_block = true;
     return result;
   }
@@ -338,7 +349,7 @@ Result<TransferResult> TcpSocket::Write(ByteSpan data) const {
     result.bytes = static_cast<std::size_t>(wrote);
     return result;
   }
-  if (errno == EAGAIN || errno == EWOULDBLOCK) {
+  if (IsWouldBlock(errno)) {
     result.would_block = true;
     return result;
   }
@@ -368,7 +379,7 @@ Result<TransferResult> TcpSocket::WriteVectored(std::span<const ByteSpan> chunks
   do {
     ::msghdr message{};
     message.msg_iov = vecs.data();
-    message.msg_iovlen = static_cast<decltype(message.msg_iovlen)>(count);
+    message.msg_iovlen = Narrow<decltype(message.msg_iovlen)>(count);
 #ifdef MSG_NOSIGNAL
     wrote = ::sendmsg(fd_, &message, MSG_NOSIGNAL);
 #else
@@ -380,7 +391,7 @@ Result<TransferResult> TcpSocket::WriteVectored(std::span<const ByteSpan> chunks
     result.bytes = static_cast<std::size_t>(wrote);
     return result;
   }
-  if (errno == EAGAIN || errno == EWOULDBLOCK) {
+  if (IsWouldBlock(errno)) {
     result.would_block = true;
     return result;
   }

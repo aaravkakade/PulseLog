@@ -140,7 +140,9 @@ ProcessStatsSampler::HostInfo ProcessStatsSampler::DescribeHost() {
     }
     struct ::sysinfo sys{};
     if (::sysinfo(&sys) == 0) {
-      info.total_memory_bytes = static_cast<std::uint64_t>(sys.totalram) * sys.mem_unit;
+      const std::uint64_t total_ram = sys.totalram;
+      const std::uint64_t mem_unit = sys.mem_unit;
+      info.total_memory_bytes = total_ram * mem_unit;
     }
   }
 #endif

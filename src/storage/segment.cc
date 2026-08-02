@@ -406,10 +406,10 @@ Result<Segment::ReadResult> Segment::Read(Offset from,
                         " claims a size that runs past the segment end");
     }
 
-    std::size_t want = static_cast<std::size_t>(
-        std::min<std::uint64_t>({static_cast<std::uint64_t>(kRecoveryChunkBytes),
-                                 limit - cursor,
-                                 static_cast<std::uint64_t>(budget_left)}));
+    const std::uint64_t chunk_limit = kRecoveryChunkBytes;
+    const std::uint64_t budget_limit = budget_left;
+    std::size_t want =
+        Narrow<std::size_t>(std::min<std::uint64_t>({chunk_limit, limit - cursor, budget_limit}));
     if (want < next_record_size) {
       // The budget cannot hold this record. Returning at least one record
       // regardless is what stops an oversized record from wedging a consumer
