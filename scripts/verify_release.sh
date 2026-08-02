@@ -252,8 +252,22 @@ PYEOF
 
 check_docker() {
   command -v docker > /dev/null 2>&1 || return 2
+
+  # The image build is the part that catches real packaging problems -- a
+  # missing .dockerignore let host build directories into the context and a
+  # stale CMakeCache.txt broke the in-image configure. Always run it.
   docker build -f docker/Dockerfile -t pulselog:verify . > /tmp/docker-build.log 2>&1 || {
     tail -25 /tmp/docker-build.log >&2; return 1; }
+  echo "  image builds cleanly"
+
+  # The multi-broker part needs the compose plugin, which is not present in
+  # every local Docker install. Report it as unavailable rather than as a
+  # failure; CI runs this half on every push.
+  if ! docker compose version > /dev/null 2>&1; then
+    echo "  docker compose is not installed here; the 3-broker cluster half" >&2
+    echo "  was NOT run locally. CI covers it." >&2
+    return 2
+  fi
   docker compose -f docker/docker-compose.yml up -d --wait --wait-timeout 180 \
     > /tmp/docker-up.log 2>&1 || { tail -25 /tmp/docker-up.log >&2; return 1; }
   local result=0
