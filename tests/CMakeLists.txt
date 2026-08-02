@@ -12,3 +12,4 @@ function(pulselog_add_test NAME)
 endfunction()
 
 add_subdirectory(unit)
+add_subdirectory(integration)
