@@ -1,7 +1,9 @@
 #include "pulselog/broker/partition_replica.h"
 
 #include <algorithm>
+#include <string>
 
+#include "pulselog/base/clock.h"
 #include "pulselog/base/logging.h"
 
 namespace pulselog::broker {
@@ -106,7 +108,8 @@ void PartitionReplica::OnLeaderAppend(Offset new_log_end_offset, std::int64_t no
     ExtractSatisfiedLocked(satisfied, now_ms);
   }
   const Offset watermark = high_water_mark_.load(std::memory_order_acquire);
-  for (auto& waiter : satisfied) waiter.on_complete(OkStatus(), watermark);
+  for (auto& waiter : satisfied)
+    waiter.on_complete(OkStatus(), watermark, waiter.local_flush_nanos);
 }
 
 Offset PartitionReplica::OnFollowerProgress(BrokerId follower,
@@ -141,7 +144,8 @@ Offset PartitionReplica::OnFollowerProgress(BrokerId follower,
     watermark = RecomputeHighWaterMarkLocked();
     ExtractSatisfiedLocked(satisfied, now_ms);
   }
-  for (auto& waiter : satisfied) waiter.on_complete(OkStatus(), watermark);
+  for (auto& waiter : satisfied)
+    waiter.on_complete(OkStatus(), watermark, waiter.local_flush_nanos);
   return watermark;
 }
 
@@ -164,7 +168,8 @@ void PartitionReplica::MarkFollowerOutOfSync(BrokerId follower, std::int64_t now
     ExtractSatisfiedLocked(satisfied, now_ms);
   }
   const Offset watermark = high_water_mark_.load(std::memory_order_acquire);
-  for (auto& waiter : satisfied) waiter.on_complete(OkStatus(), watermark);
+  for (auto& waiter : satisfied)
+    waiter.on_complete(OkStatus(), watermark, waiter.local_flush_nanos);
 }
 
 std::vector<FollowerState> PartitionReplica::Followers() const {
@@ -194,15 +199,25 @@ std::size_t PartitionReplica::PersistedReplicaCount(Offset offset) const {
   return count;
 }
 
+void PartitionReplica::PublishWaiterCountLocked() {
+  pending_waiters_.store(waiters_.size(), std::memory_order_release);
+}
+
 void PartitionReplica::ExtractSatisfiedLocked(std::vector<DurabilityWaiter>& out,
                                               std::int64_t now_ms) {
-  if (waiters_.empty()) return;
+  if (waiters_.empty()) {
+    PublishWaiterCountLocked();
+    return;
+  }
 
   const Offset flushed = log_->FlushedOffset();
   const Offset log_end = log_->LogEndOffset();
   const std::size_t quorum = assignment_.QuorumSize();
 
-  auto satisfied = [&](const DurabilityWaiter& waiter) {
+  // Non-const: stamps the moment the leader's own flush covered the record,
+  // which is what separates local fsync cost from replication cost in the
+  // latency breakdown. Called under mutex_, so the write needs no atomics.
+  auto satisfied = [&](DurabilityWaiter& waiter) {
     switch (waiter.mode) {
       case AckMode::kNone:
         return true;
@@ -212,7 +227,11 @@ void PartitionReplica::ExtractSatisfiedLocked(std::vector<DurabilityWaiter>& out
         return log_end > waiter.required_offset;
       case AckMode::kQuorum: {
         // Count replicas that have *persisted* through the record.
-        std::size_t persisted = flushed > waiter.required_offset ? 1 : 0;
+        const bool locally_flushed = flushed > waiter.required_offset;
+        if (locally_flushed && waiter.local_flush_nanos == 0) {
+          waiter.local_flush_nanos = MonotonicNanos();
+        }
+        std::size_t persisted = locally_flushed ? 1 : 0;
         for (const auto& [id, follower] : followers_) {
           if (follower.in_sync && follower.flushed_offset > waiter.required_offset) ++persisted;
         }
@@ -224,7 +243,7 @@ void PartitionReplica::ExtractSatisfiedLocked(std::vector<DurabilityWaiter>& out
 
   (void)now_ms;
   auto partition_point =
-      std::stable_partition(waiters_.begin(), waiters_.end(), [&](const DurabilityWaiter& waiter) {
+      std::stable_partition(waiters_.begin(), waiters_.end(), [&](DurabilityWaiter& waiter) {
         return !satisfied(waiter);
       });
 
@@ -233,6 +252,7 @@ void PartitionReplica::ExtractSatisfiedLocked(std::vector<DurabilityWaiter>& out
     out.push_back(std::move(*it));
   }
   waiters_.erase(partition_point, waiters_.end());
+  PublishWaiterCountLocked();
 }
 
 void PartitionReplica::AddWaiter(DurabilityWaiter waiter, std::int64_t now_ms) {
@@ -245,7 +265,8 @@ void PartitionReplica::AddWaiter(DurabilityWaiter waiter, std::int64_t now_ms) {
   // Callbacks run outside the lock: they post onto io loops and must never be
   // able to re-enter this partition's mutex.
   const Offset watermark = high_water_mark_.load(std::memory_order_acquire);
-  for (auto& completed : satisfied) completed.on_complete(OkStatus(), watermark);
+  for (auto& completed : satisfied)
+    completed.on_complete(OkStatus(), watermark, completed.local_flush_nanos);
 }
 
 std::size_t PartitionReplica::CompleteSatisfiedWaiters(std::int64_t now_ms) {
@@ -256,7 +277,8 @@ std::size_t PartitionReplica::CompleteSatisfiedWaiters(std::int64_t now_ms) {
     ExtractSatisfiedLocked(satisfied, now_ms);
   }
   const Offset watermark = high_water_mark_.load(std::memory_order_acquire);
-  for (auto& waiter : satisfied) waiter.on_complete(OkStatus(), watermark);
+  for (auto& waiter : satisfied)
+    waiter.on_complete(OkStatus(), watermark, waiter.local_flush_nanos);
   return satisfied.size();
 }
 
@@ -270,18 +292,37 @@ std::size_t PartitionReplica::ExpireWaiters(std::int64_t now_ms) {
         });
     for (auto it = partition_point; it != waiters_.end(); ++it) expired.push_back(std::move(*it));
     waiters_.erase(partition_point, waiters_.end());
+    PublishWaiterCountLocked();
   }
 
   if (!expired.empty()) {
+    // Say which side was behind. A bare "timed out" gives nothing to act on:
+    // the leader's own fsync, a follower's fsync, and a follower that stopped
+    // reporting all look identical from the outside and have different fixes.
+    std::string followers;
+    {
+      std::lock_guard<std::mutex> lock(mutex_);
+      for (const auto& [id, follower] : followers_) {
+        followers += " peer=" + std::to_string(id) +
+                     "(leo=" + std::to_string(follower.log_end_offset) +
+                     ",flushed=" + std::to_string(follower.flushed_offset) +
+                     (follower.in_sync ? ",in_sync" : ",OUT_OF_SYNC") + ")";
+      }
+    }
     PL_WARN(kComponent) << "produce acknowledgements timed out"
                         << " partition=" << topic_partition_.ToString()
-                        << " count=" << expired.size();
+                        << " count=" << expired.size()
+                        << " required_offset=" << expired.front().required_offset
+                        << " leader_log_end=" << log_->LogEndOffset()
+                        << " leader_flushed=" << log_->FlushedOffset()
+                        << " quorum=" << assignment_.QuorumSize() << followers;
   }
   const Offset watermark = high_water_mark_.load(std::memory_order_acquire);
   for (auto& waiter : expired) {
     waiter.on_complete(
         TimedOut("acknowledgement deadline exceeded before the durability condition was met"),
-        watermark);
+        watermark,
+        waiter.local_flush_nanos);
   }
   return expired.size();
 }
@@ -291,9 +332,10 @@ std::size_t PartitionReplica::FailAllWaiters(const Status& reason) {
   {
     std::lock_guard<std::mutex> lock(mutex_);
     pending.swap(waiters_);
+    PublishWaiterCountLocked();
   }
   const Offset watermark = high_water_mark_.load(std::memory_order_acquire);
-  for (auto& waiter : pending) waiter.on_complete(reason, watermark);
+  for (auto& waiter : pending) waiter.on_complete(reason, watermark, waiter.local_flush_nanos);
   return pending.size();
 }
 

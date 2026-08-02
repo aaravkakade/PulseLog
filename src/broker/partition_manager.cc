@@ -182,7 +182,24 @@ Result<std::size_t> PartitionManager::FlushDuePartitions(std::int64_t now_ms) {
   Status first_error = OkStatus();
 
   for (PartitionReplica* replica : All()) {
-    if (!replica->log().NeedsFlush(now_ms)) continue;
+    if (!replica->log().NeedsFlush(now_ms)) {
+      // Nothing to flush, but a waiter may still be satisfiable, and if it is,
+      // this is the only thread that will notice.
+      //
+      // A quorum waiter is re-evaluated on exactly two events: a flush here,
+      // and a follower progress report. Both can have already happened in the
+      // wrong order. The follower reports durable while the leader's own
+      // flushed offset is still behind; the leader then flushes, which
+      // satisfies the condition -- but by the next sweep NeedsFlush() is false
+      // and the old `continue` skipped the check, while the replicator stops
+      // probing a follower that is caught up and durable. Nothing was left to
+      // wake the waiter, so a write that was durable on all three replicas sat
+      // until its deadline and was answered with TIMEOUT.
+      //
+      // The pending check keeps this to an atomic load per idle partition.
+      if (replica->HasPendingWaiters()) (void)replica->CompleteSatisfiedWaiters(now_ms);
+      continue;
+    }
     const Status status = replica->log().Flush();
     if (!status.ok()) {
       // One bad disk must not stop the others from being flushed.

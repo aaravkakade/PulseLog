@@ -53,7 +53,17 @@ struct DurabilityWaiter {
   Offset required_offset = kInvalidOffset;  // Last offset of the batch.
   AckMode mode = AckMode::kLeader;
   std::int64_t deadline_ms = 0;
-  std::function<void(Status, Offset high_water_mark)> on_complete;
+  // The third argument is local_flush_nanos below: the callback needs it to
+  // attribute its wait, and by the time it runs the waiter has been moved.
+  std::function<void(Status, Offset high_water_mark, std::int64_t local_flush_nanos)> on_complete;
+
+  // Stage timestamps for the latency breakdown, monotonic nanoseconds; zero
+  // means the stage was not reached. local_flush_nanos is stamped the first
+  // time the leader's own flushed offset covers this record, which splits a
+  // quorum wait into "our disk" and "the network plus their disks" -- the two
+  // have completely different fixes.
+  std::int64_t added_nanos = 0;
+  std::int64_t local_flush_nanos = 0;
 };
 
 class PartitionReplica {
@@ -121,6 +131,13 @@ class PartitionReplica {
   // Returns how many completed.
   std::size_t CompleteSatisfiedWaiters(std::int64_t now_ms);
 
+  // Whether any waiter is outstanding. Lock-free, so the flusher can ask this
+  // of every idle partition on every tick without contending with the produce
+  // path for the mutex.
+  [[nodiscard]] bool HasPendingWaiters() const noexcept {
+    return pending_waiters_.load(std::memory_order_acquire) != 0;
+  }
+
   // Fails every waiter past its deadline with TIMEOUT. Returns how many.
   std::size_t ExpireWaiters(std::int64_t now_ms);
 
@@ -152,6 +169,10 @@ class PartitionReplica {
   [[nodiscard]] Offset RecomputeHighWaterMarkLocked();
 
   // Caller must hold `mutex_`. Moves satisfied waiters into `out`.
+  // Republishes waiters_.size() to pending_waiters_. Call under mutex_ after
+  // any change to waiters_.
+  void PublishWaiterCountLocked();
+
   void ExtractSatisfiedLocked(std::vector<DurabilityWaiter>& out, std::int64_t now_ms);
 
   TopicPartition topic_partition_;
@@ -162,6 +183,9 @@ class PartitionReplica {
   metadata::PartitionAssignment assignment_;
   std::map<std::int32_t, FollowerState> followers_;
   std::vector<DurabilityWaiter> waiters_;
+  // Shadows waiters_.size() so HasPendingWaiters() needs no lock. Written
+  // only under mutex_; read without it.
+  std::atomic<std::size_t> pending_waiters_{0};
 
   std::atomic<Offset> high_water_mark_{0};
 };
