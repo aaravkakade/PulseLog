@@ -99,21 +99,21 @@ Median of 5 trials; spread is (max − min) / median.
 
 | Scenario | Config | records/s | spread | p50 | p99 | p99.9 | err |
 |---|---|---:|---:|---:|---:|---:|---:|
-| 01 single producer, no replication | `1p/1part/b100/128B/leader` | 847,397 | ±1% | 103 µs | 187 µs | 474 µs | 0 |
-| 02 multi-producer, one partition | `4p/1part/b100/128B/leader` | 2,313,443 | ±6% | 144 µs | 279 µs | 1,714 µs | 0 |
-| 03 multi-producer, multi-partition | `4p/8part/b100/128B/leader` | 2,222,058 | ±3% | 147 µs | 498 µs | 605 µs | 0 |
-| 04 producers + consumers | `4p/4part/b100/128B/leader` | 1,085,293 | ±103% | 191 µs | 2,562 µs | 3,305 µs | 0 |
-| 05 leader ack | `4p/4part/b100/128B/leader` | 2,186,478 | ±11% | 149 µs | 452 µs | 606 µs | 0 |
-| 06 quorum ack | `4p/4part/b100/128B/quorum` | 224,446 | ±6% | 1,883 µs | 3,011 µs | 4,012 µs | 0 |
-| 07 replication under load (3 brokers, RF=3) | `4p/6part/b100/128B/leader` | 1,023,623 | ±10% | 305 µs | 1,160 µs | 2,314 µs | 0 |
-| 08 no batching | `4p/4part/b1/128B/leader` | 44,851 | ±1% | 86 µs | 155 µs | 215 µs | 0 |
-| 09 small message (16 B) | `4p/4part/b200/16B/leader` | 4,316,447 | ±4% | 140 µs | 369 µs | 598 µs | 0 |
-| 10 large message (64 KiB) | `4p/4part/b4/65536B/leader` | 5,458 (341 MiB/s) | ±37% | 679 µs | 1,794 µs | 508,297 µs | 0 |
-| 11 acks=none | `4p/4part/b100/128B/none` | 2,220,648 | ±2% | 148 µs | 454 µs | 599 µs | 0 |
-| 12 `fsync.mode=data` | `4p/4part/b100/128B/leader` | 2,200,054 | ±2% | 147 µs | 465 µs | 618 µs | 0 |
-| 13 baseline: mutex queue | `4p/1part/b1/128B` (in-process) | 3,300,476 | ±38% | <1 µs | 14 µs | 24 µs | 0 |
+| 01 single producer, no replication | `1p/1part/b100/128B/leader` | 869,072 | ±1% | 100 µs | 157 µs | 493 µs | 0 |
+| 02 multi-producer, one partition | `4p/1part/b100/128B/leader` | 2,392,197 | ±5% | 139 µs | 318 µs | 1,068 µs | 0 |
+| 03 multi-producer, multi-partition | `4p/8part/b100/128B/leader` | 2,196,040 | ±14% | 147 µs | 492 µs | 655 µs | 0 |
+| 04 producers + consumers | `4p/4part/b100/128B/leader` | 1,236,995 | ±89% | 183 µs | 2,578 µs | 2,888 µs | 0 |
+| 05 leader ack | `4p/4part/b100/128B/leader` | 2,242,462 | ±2% | 144 µs | 507 µs | 646 µs | 0 |
+| 06 quorum ack | `4p/4part/b100/128B/quorum` | 239,527 | ±2% | 1,564 µs | 2,560 µs | 2,652 µs | 0 |
+| 07 replication under load (3 brokers, RF=3) | `4p/6part/b100/128B/leader` | 1,003,379 | ±3% | 303 µs | 1,344 µs | 2,708 µs | 0 |
+| 08 no batching | `4p/4part/b1/128B/leader` | 47,905 | ±10% | 80 µs | 150 µs | 233 µs | 0 |
+| 09 small message (16 B) | `4p/4part/b200/16B/leader` | 4,412,064 | ±2% | 135 µs | 361 µs | 489 µs | 0 |
+| 10 large message (64 KiB) | `4p/4part/b4/65536B/leader` | 5,446 (340 MiB/s) | ±36% | 622 µs | 1,990 µs | 477,888 µs | 0 |
+| 11 acks=none | `4p/4part/b100/128B/none` | 2,256,356 | ±1% | 142 µs | 456 µs | 668 µs | 0 |
+| 12 `fsync.mode=data` | `4p/4part/b100/128B/leader` | 2,261,126 | ±2% | 144 µs | 441 µs | 606 µs | 0 |
+| 13 baseline: mutex queue | `4p/1part/b1/128B` (in-process) | 3,277,785 | ±36% | 0 µs | 14 µs | 25 µs | 0 |
 
-Scenario 04's ±103% spread means its median carries no useful precision. It is
+Scenario 04's ±89% spread means its median carries no useful precision. It is
 listed for completeness and no claim is made from it.
 
 Cluster-level measurements, 3 brokers at replication factor 3, 200,000 records:
@@ -122,11 +122,11 @@ Cluster-level measurements, 3 brokers at replication factor 3, 200,000 records:
 |---|---|
 | Crash recovery after `SIGKILL` | 0.051 s to accept connections, 0.052 s to serve its full log |
 | Records before kill / after recovery | 205,000 / 205,000, intact |
-| Replication lag under load | p50 8,100 records, p99 32,100, max 32,100 |
+| Replication lag under load | p50 3,400 records, p99 28,700, max 28,700 |
 | Followers caught up once load stopped | yes, within 1 ms |
-| Peak CPU, all three brokers | 62.7% of 4 cores (mean 51.7%) |
-| Peak resident memory, all three brokers | 41.7 MiB |
-| Disk written | 92.3 MiB, 484 B per 128-byte record |
+| Peak CPU, all three brokers | 58.8% of 4 cores (mean 47.6%) |
+| Peak resident memory, all three brokers | 41.1 MiB |
+| Disk written | 484 B per 128-byte record |
 
 484 bytes per record is what replication factor 3 costs: roughly 155 bytes on
 the wire (128-byte value plus 27 bytes of framing) written three times.
@@ -153,12 +153,12 @@ Judged on the Linux x86-64 results only.
 
 | Target | Result |
 |---|---|
-| >500,000 records/s on a single local broker, small batched messages | **Met.** 847k single-producer, 2.19M with four producers, 4.32M with 16-byte values |
-| Sub-millisecond median publish latency in memory-backed mode | **Met.** p50 is 86–305 µs across every non-quorum scenario |
-| Low-single-digit-millisecond p99 in durable mode | **Met on Linux.** Quorum p99 is 3.0 ms, p99.9 4.0 ms. Not met on macOS, where `F_FULLFSYNC` puts it at ~22 ms (§3.2) |
+| >500,000 records/s on a single local broker, small batched messages | **Met.** 869k single-producer, 2.24M with four producers, 4.41M with 16-byte values |
+| Sub-millisecond median publish latency in memory-backed mode | **Met.** p50 is 80–303 µs across every non-quorum scenario |
+| Low-single-digit-millisecond p99 in durable mode | **Met on Linux.** Quorum p99 is 2.6 ms, p99.9 2.7 ms. Not met on macOS, where `F_FULLFSYNC` puts it at ~22 ms (§3.2) |
 | Recover partition state within seconds after abrupt restart | **Met with room to spare.** 0.052 s to serve a 205,000-record log after `SIGKILL` |
 | Scale throughput as partitions and workers increase | **Partially.** Producer count scales cleanly; partition count does not (§4.2) |
-| Demonstrable gains from batching and buffer reuse | **Met.** Batching is a 49× effect on Linux, buffer pooling 30× (§4.1, §7) |
+| Demonstrable gains from batching and buffer reuse | **Met.** Batching is a 47× effect on Linux, buffer pooling 30× (§4.1, §7) |
 
 ---
 
@@ -173,15 +173,15 @@ From §3.1, four producers, 4 partitions, `acks=leader`, 128-byte values:
 
 | Batch size | records/s | p50 | p99 |
 |---:|---:|---:|---:|
-| 1 | 44,851 | 86 µs | 155 µs |
-| 100 | 2,186,478 | 149 µs | 452 µs |
+| 1 | 47,905 | 80 µs | 150 µs |
+| 100 | 2,242,462 | 144 µs | 507 µs |
 
-**Batching 100 records is a 49× throughput increase for 63 µs of added p50.**
+**Batching 100 records is a 47× throughput increase for 64 µs of added p50.**
 Nothing else measured here moves throughput by a comparable factor.
 
-The reason is visible in the batch-1 row rather than in the broker: at 86 µs
+The reason is visible in the batch-1 row rather than in the broker: at 80 µs
 p50 with one round trip per record, four closed-loop producers are bounded at
-roughly 46k records/s by latency alone, however fast the broker is. Batching
+roughly 50k records/s by latency alone, however fast the broker is. Batching
 is what removes the round trip from the per-record cost.
 
 A finer sweep on the Apple M2 (single producer, one partition) shows where the
@@ -218,7 +218,7 @@ different reasons and by different margins:
 
 | | 1 partition | 8 partitions |
 |---|---:|---:|
-| Linux x86-64 | 2,313,443 ±6% | 2,222,058 ±3% |
+| Linux x86-64 | 2,392,197 ±5% | 2,196,040 ±14% |
 | Apple M2 | 2,490,528 | 1,142,777 |
 
 On Linux the two are within their spreads — **no difference is claimed**. On
@@ -233,13 +233,13 @@ the measurement that says so.
 
 ### 4.3 Small messages are framing-bound, large messages are device-bound
 
-* 16-byte values reach **4.32M records/s but only 177 MiB/s** — per-record
+* 16-byte values reach **4.41M records/s but only 181 MiB/s** — per-record
   framing (27 bytes) is larger than the payload, so the engine is doing
   bookkeeping, not moving data.
-* 64 KiB values reach **5,458 records/s and 341 MiB/s** with a p50 of 679 µs,
-  a p99 of 1.8 ms, and a **p99.9 of 508 ms**. Each request carries 256 KiB, so
+* 64 KiB values reach **5,446 records/s and 340 MiB/s** with a p50 of 622 µs,
+  a p99 of 2.0 ms, and a **p99.9 of 478 ms**. Each request carries 256 KiB, so
   a segment rotation or a flush stall lands squarely on one request and shows
-  up undiluted in the far tail. The ±37% spread is the widest of any scenario
+  up undiluted in the far tail. The ±36% spread is the widest of any scenario
   except 04. The p99.9 is reported rather than trimmed: it is what a client
   sending 64 KiB records would occasionally see.
 
@@ -247,7 +247,7 @@ the measurement that says so.
 
 The suite includes an in-process, mutex-protected `std::vector` with no
 networking, no protocol, no checksums and no disk. On the Linux x86-64 host it
-reaches 3,300,476 records/s (±38%); PulseLog reaches 2,186,478 (±11%) on the
+reaches 3,277,785 records/s (±36%); PulseLog reaches 2,242,462 (±2%) on the
 same host with `acks=leader`.
 
 **This ratio is not a result and should not be quoted as one.** Three reasons:
@@ -255,7 +255,7 @@ same host with `acks=leader`.
 1. The baseline provides none of the guarantees being measured — no
    durability, no replication, no ordering across processes, no network. A
    ratio against it is a ratio against a different problem.
-2. Both figures carry spreads of ±11% and ±38%. Any ratio derived from them
+2. The baseline carries a ±36% spread. Any ratio derived from it
    inherits both, which makes a two-significant-figure percentage meaningless.
 3. The number moves with the baseline's own noise rather than with anything
    about PulseLog. A run where the mutex queue happened to be slow would
@@ -270,8 +270,8 @@ of magnitude to its own bookkeeping. That is the whole claim.
 
 ## 5. Where durable-mode latency goes
 
-On Linux, `acks=quorum` runs at 224,446 records/s with a p50 of 1.9 ms and a
-p99 of 3.0 ms — about 10× less throughput and 6× the p99 of `acks=leader`. This
+On Linux, `acks=quorum` runs at 239,527 records/s with a p50 of 1.6 ms and a
+p99 of 2.6 ms — about 9× less throughput and 5× the p99 of `acks=leader`. This
 section says where that time actually goes, because "durable writes are slower"
 is not an explanation and cannot be acted on.
 
@@ -283,14 +283,15 @@ tail can be attributed rather than guessed at. Linux x86-64, `acks=quorum`,
 
 | Stage | p99 | Share of the total |
 |---|---:|---|
-| Worker queue wait | 279 µs | ~6% |
-| Log append | 131 µs | ~3% |
-| **Leader's own fsync** | **3,299 µs** | **~60%** |
-| Waiting for a quorum to flush | 2,204 µs | ~30% |
+| Worker queue wait | 275 µs | ~6% |
+| Log append | 144 µs | ~3% |
+| **Leader's own fsync** | **2,193 µs** | **~46%** |
+| Waiting for a quorum to flush | 2,070 µs | ~44% |
 
-The leader's own fsync is the single largest term, and the replication wait —
-which is itself mostly the *followers'* fsyncs — is the second. Together the
-disk accounts for roughly 90% of durable-mode latency. Queueing and the append
+The leader's own fsync is the largest single term and the replication wait —
+which is itself mostly the *followers'* fsyncs — is nearly as large. Together
+the disk accounts for roughly 90% of durable-mode latency, and their relative
+split moves between runs while their sum does not. Queueing and the append
 itself are noise by comparison.
 
 That also means the remaining headroom is in the storage device, not in the
@@ -305,19 +306,19 @@ flushed.
 
 | Configuration | records/s | spread | p50 | p99 | verdict |
 |---|---:|---:|---:|---:|---|
-| Baseline: 2 ms / 200-record group commit | 138,427 | ±7% | 2,822 µs | 4,411 µs | — |
-| Tighter group commit: 1 ms / 50 records | 136,810 | ±9% | 2,814 µs | 5,268 µs | no difference measured |
-| Wider group commit: 10 ms / 2000 records | 73,808 | ±8% | 4,977 µs | 9,937 µs | **47% slower** |
-| `fdatasync` instead of `fsync` | 130,308 | ±11% | 2,849 µs | 5,509 µs | no improvement measured |
-| Preallocation disabled | 134,366 | ±8% | 2,861 µs | 4,821 µs | no difference measured |
-| fsync inside every append | 136,001 | ±7% | 1,584 µs | 23,593 µs | p99 5× worse |
+| Baseline: 2 ms / 200-record group commit | 138,196 | ±10% | 2,814 µs | 4,686 µs | — |
+| Tighter group commit: 1 ms / 50 records | 148,994 | ±11% | 2,742 µs | 3,514 µs | no difference measured — see below |
+| Wider group commit: 10 ms / 2000 records | 74,708 | ±33% | 4,964 µs | 10,863 µs | **46% slower** |
+| `fdatasync` instead of `fsync` | 132,680 | ±3% | 2,818 µs | 6,443 µs | no improvement measured |
+| Preallocation disabled | 137,172 | ±9% | 2,824 µs | 4,772 µs | no difference measured |
+| fsync inside every append | 141,980 | ±13% | 1,530 µs | 22,168 µs | p99 5× worse |
 
 **No configuration tested beat the default.** Three results deserve to be
 stated rather than quietly dropped:
 
 * **`fdatasync` did not help.** The expected saving is the metadata write that
   `fsync` performs and `fdatasync` skips. It did not appear above the noise
-  (130,308 ±11% against 138,427 ±7% — the ranges overlap). Disabling
+  (132,680 ±3% against 138,196 ±10% — the ranges overlap). Disabling
   preallocation also produced no measurable change, which points the same way:
   on this filesystem and virtual disk the data write dominates and the metadata
   cost is not what is limiting the result. **No speedup is claimed for
@@ -326,17 +327,17 @@ stated rather than quietly dropped:
 * **Widening the group-commit window made things worse.** A longer window puts
   more records behind one fsync, but every acknowledgement then waits longer
   for that fsync to *start*. For a closed-loop producer that is a straight
-  loss — 47% throughput and a doubled p99. Tightening the window did nothing
+  loss — 46% throughput and a doubled p99. Tightening the window did nothing
   measurable in the other direction, which places the default near the useful
   end of the curve already.
 
 * **`fsync` inside every append trades the median for the tail.** p50 improves
-  to 1.58 ms because no request waits for a batching window, but p99 degrades
-  to 23.6 ms because every request now pays a full device commit. The stage
-  breakdown shows why: local flush drops to 72 µs while queue wait and append
+  to 1.53 ms because no request waits for a batching window, but p99 degrades
+  to 22.2 ms because every request now pays a full device commit. The stage
+  breakdown shows why: local flush drops to 78 µs while queue wait and append
   jump to ~21 ms each, since appends now serialise behind each other's syncs.
 
-The durable p99 of 3.0 ms therefore stands as measured, with its cause
+The durable p99 of 2.6 ms therefore stands as measured, with its cause
 identified, rather than being tuned down by weakening what an acknowledgement
 promises.
 
@@ -458,7 +459,7 @@ optimisation nobody can show a number for is a claim, not a result.
 
 | Optimisation | Measured effect | Where |
 |---|---|---|
-| Producer batching (batch 1 → 100) | **49×** throughput, +63 µs p50 | §4.1 |
+| Producer batching (batch 1 → 100) | **47×** throughput, +64 µs p50 | §4.1 |
 | Producer partitioning fix (sticky + randomised start) | **6.9×** throughput, p99 80× better | §8.2 |
 | Sparse offset index + bounded block read | **18×** offset lookup, **16×** log read | §8.1 |
 | Buffer pooling vs per-request allocation | **30×** cheaper acquire/release | §7 |

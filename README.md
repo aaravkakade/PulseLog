@@ -58,9 +58,9 @@ means it works and is exercised, but no number or dedicated test isolates it.
 | Partitioned topics, key routing, per-partition ordering | verified | unit + integration tests |
 | Segmented log, sparse indexes, CRC-32C, retention | measured | 18× offset lookup, 16× log read |
 | Crash recovery from a torn tail | measured + verified | 0.052 s for 205k records; failure-injection suite |
-| Leader/follower replication, high-water mark, ISR | measured + verified | 1.02M records/s at RF=3; cluster failure suite |
-| Quorum acknowledgement (durable) | measured + verified | 224k records/s, p99 3.0 ms on Linux |
-| `acks=none` / `acks=leader` (memory-backed) | measured | 2.22M / 2.19M records/s, indistinguishable — see below |
+| Leader/follower replication, high-water mark, ISR | measured + verified | 1.00M records/s at RF=3; cluster failure suite |
+| Quorum acknowledgement (durable) | measured + verified | 240k records/s, p99 2.6 ms on Linux |
+| `acks=none` / `acks=leader` (memory-backed) | measured | 2.26M / 2.24M records/s, indistinguishable — see below |
 | Consumer groups, assignment, heartbeats, offset commits | verified | integration tests + Linux smoke test |
 | Group coordinator routing | verified | regression test after a real bug |
 | Binary protocol, dual checksums, 17 opcodes | verified | round-trip and malformed-frame tests |
@@ -215,40 +215,40 @@ request carries 100 records, so these are not per-record figures.
 
 | Scenario | records/s | spread | p50 | p99 | p99.9 |
 |---|---:|---:|---:|---:|---:|
-| 4 producers, 8 partitions, batch 100 | 2,222,058 | ±3% | 147 µs | 498 µs | 605 µs |
-| 4 producers, 16-byte values, batch 200 | 4,316,447 | ±4% | 140 µs | 369 µs | 598 µs |
-| Single producer, 1 partition, batch 100 | 847,397 | ±1% | 103 µs | 187 µs | 474 µs |
-| 3 brokers, replication factor 3 | 1,023,623 | ±10% | 305 µs | 1,160 µs | 2,314 µs |
-| `acks=quorum` (durable, 3 replicas) | 224,446 | ±6% | 1,883 µs | 3,011 µs | 4,012 µs |
-| No batching (batch 1) | 44,851 | ±1% | 86 µs | 155 µs | 215 µs |
-| 4 producers, 64 KiB values | 5,458 (341 MiB/s) | ±37% | 679 µs | 1,794 µs | 508 ms |
+| 4 producers, 4 partitions, batch 100 | 2,242,462 | ±2% | 144 µs | 507 µs | 646 µs |
+| 4 producers, 16-byte values, batch 200 | 4,412,064 | ±2% | 135 µs | 361 µs | 489 µs |
+| Single producer, 1 partition, batch 100 | 869,072 | ±1% | 100 µs | 157 µs | 493 µs |
+| 3 brokers, replication factor 3 | 1,003,379 | ±3% | 303 µs | 1,344 µs | 2,708 µs |
+| `acks=quorum` (durable, 3 replicas) | 239,527 | ±2% | 1,564 µs | 2,560 µs | 2,652 µs |
+| No batching (batch 1) | 47,905 | ±10% | 80 µs | 150 µs | 233 µs |
+| 4 producers, 64 KiB values | 5,446 (340 MiB/s) | ±36% | 622 µs | 1,990 µs | 478 ms |
 
 Cluster behaviour, same hardware, 3 brokers at replication factor 3:
 
 | Metric | Measured |
 |---|---|
-| Crash recovery after `SIGKILL` | 0.05 s to serve its full log again, 205,000 records intact |
-| Replication lag under sustained load | p50 8,100 records, p99 32,100 |
+| Crash recovery after `SIGKILL` | 0.052 s to serve its full log again, 205,000 records intact |
+| Replication lag under sustained load | p50 3,400 records, p99 28,700 |
 | Followers caught up after load stopped | yes, within 1 ms |
-| Peak CPU across all three brokers | 62.7% of 4 cores |
-| Peak resident memory across all three | 41.7 MiB |
+| Peak CPU across all three brokers | 58.8% of 4 cores |
+| Peak resident memory across all three | 41.1 MiB |
 | Disk written per 128-byte record | 484 B (3 replicas × ~155 B on the wire) |
 
 Reading these honestly:
 
-* **Batching is the dominant effect.** 44,851 → 2,186,478 records/s from batch
-  1 to batch 100, for 63 µs of added p50. Nothing else in this table moves
+* **Batching is the dominant effect.** 47,905 → 2,242,462 records/s from batch
+  1 to batch 100, for 64 µs of added p50. Nothing else in this table moves
   throughput by a comparable factor.
-* **`acks=leader` and `acks=none` are indistinguishable** (2,186,478 vs
-  2,220,648, inside a ±11% spread). That is not a surprise, it is the
+* **`acks=leader` and `acks=none` are indistinguishable** (2,242,462 vs
+  2,256,356, inside their spreads). That is not a surprise, it is the
   definition: `acks=leader` means the record is in the leader's log, and does
   not wait for a flush. Only `acks=quorum` waits for durability.
-* **Durability costs about 10× throughput and about 6× p99** on this hardware
-  (2.19M → 224k records/s, 452 µs → 3,011 µs). Where that time goes is broken
+* **Durability costs about 9× throughput and about 5× p99** on this hardware
+  (2.24M → 240k records/s, 507 µs → 2,560 µs). Where that time goes is broken
   down below.
-* **More partitions did not help** — 2,222,058 across 8 partitions versus
-  2,186,478 across 4 is inside the spread.
-* **The 64 KiB p99.9 of 508 ms is real** and comes from segment rotation
+* **More partitions did not help** — 2,196,040 across 8 partitions versus
+  2,242,462 across 4 is inside the spread.
+* **The 64 KiB p99.9 of 478 ms is real** and comes from segment rotation
   colliding with a large write on a virtual disk. It is reported rather than
   trimmed.
 
@@ -260,22 +260,22 @@ p99 per stage:
 
 | Stage | p99 | Share |
 |---|---:|---|
-| Worker queue wait | 279 µs | 6% |
-| Log append | 131 µs | 3% |
-| **Leader's own fsync** | **3,299 µs** | **~60%** |
-| Waiting for a quorum to flush | 2,204 µs | ~30% |
+| Worker queue wait | 275 µs | ~6% |
+| Log append | 144 µs | ~3% |
+| **Leader's own fsync** | **2,193 µs** | **~46%** |
+| Waiting for a quorum to flush | 2,070 µs | ~44% |
 
-The leader's own fsync is the single largest term. Four tuning changes were
-measured against this baseline, each over 5 trials:
+The disk accounts for roughly 90% of it. Five tuning changes were measured
+against this baseline, each over 5 trials:
 
 | Change | records/s | vs baseline |
 |---|---:|---|
-| Baseline (2 ms / 200-record group commit) | 138,427 ±7% | — |
-| Tighter group commit (1 ms / 50 records) | 136,810 ±9% | no change (inside spread) |
-| Wider group commit (10 ms / 2000 records) | 73,808 ±8% | **47% slower** |
-| `fdatasync` instead of `fsync` | 130,308 ±11% | no improvement |
-| Preallocation disabled | 134,366 ±8% | no change (inside spread) |
-| fsync inside every append | 136,001 ±7% | p99 5× worse (23.6 ms) |
+| Baseline (2 ms / 200-record group commit) | 138,196 ±10% | — |
+| Tighter group commit (1 ms / 50 records) | 148,994 ±11% | no change — direction reversed between runs |
+| Wider group commit (10 ms / 2000 records) | 74,708 ±33% | **46% slower** |
+| `fdatasync` instead of `fsync` | 132,680 ±3% | no improvement |
+| Preallocation disabled | 137,172 ±9% | no change (inside spread) |
+| fsync inside every append | 141,980 ±13% | p99 5× worse (22.2 ms) |
 
 **No configuration tested beat the default.** Two results are worth stating
 plainly rather than quietly dropping:
@@ -289,8 +289,12 @@ plainly rather than quietly dropping:
   window means more records share an fsync, but every acknowledgement then
   waits longer for that fsync to start. For a closed-loop producer that is a
   straight loss.
+* **Tightening it produced opposite results in two consecutive CI runs**
+  (136,810 vs a 138,427 baseline, then 148,994 vs 138,196). The ordering
+  reversed and both gaps sit inside the spreads, so no speedup is claimed —
+  what the pair shows is that the default sits on a flat part of the curve.
 
-The durable p99 of 3.0 ms therefore stands as measured, with its cause
+The durable p99 of 2.6 ms therefore stands as measured, with its cause
 identified, rather than being tuned down by weakening what an acknowledgement
 promises.
 
@@ -317,8 +321,8 @@ engine.
 ### Baselines and micro-benchmarks
 
 An in-process, mutex-protected queue with no networking, no protocol, no
-checksums and no disk reaches 3,300,476 records/s on the same Linux host
-(±38%). It is included in the suite as a ceiling to measure against, not as a
+checksums and no disk reaches 3,277,785 records/s on the same Linux host
+(±36%). It is included in the suite as a ceiling to measure against, not as a
 headline: it provides none of the guarantees PulseLog does, and the comparison
 says nothing about either system's absolute performance. See
 [BENCHMARKING.md](docs/BENCHMARKING.md) for what it does and does not tell you.
@@ -399,6 +403,7 @@ docs/               design documents
 | [BENCHMARKING.md](docs/BENCHMARKING.md) | How to reproduce every number |
 | [PERFORMANCE_RESULTS.md](docs/PERFORMANCE_RESULTS.md) | Measured results with full conditions |
 | [FAILURE_SEMANTICS.md](docs/FAILURE_SEMANTICS.md) | What survives what, and what does not |
+| [PORTABILITY.md](docs/PORTABILITY.md) | Where Linux and macOS differ, and which guarantees change |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Build, test, style |
 | [SECURITY.md](SECURITY.md) | Threat model and the absence of authn/authz |
 
