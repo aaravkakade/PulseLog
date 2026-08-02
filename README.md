@@ -168,45 +168,143 @@ with Client("127.0.0.1:9092") as client:
 
 ## Measured performance
 
-Apple M2 (8 cores), macOS 14.5, APFS, Apple clang 15, `-O2`. Median of 5 trials,
-from the JSON committed in `results/`;
-the spread is shown because this is a thermally constrained laptop, not a
-benchmark host. Latency is **per produce request** — with `batch=100` one
-request carries 100 records.
+Every number below was measured on the hardware named with it. Nothing is
+transferred between platforms, and each figure carries the spread across
+trials, because a median without a spread implies a precision these
+measurements do not have.
 
-| Scenario | records/s | spread | p50 | p99 |
-|---|---:|---:|---:|---:|
-| Single producer, 1 partition, batch 100 | 1,036,382 | 823k–1,157k | 37 µs | 871 µs |
-| 4 producers, 1 partition, batch 100 | 2,490,528 | 1,404k–2,795k | 76 µs | 2.4 ms |
-| 4 producers, 16-byte values, batch 200 | 4,009,087 | 3,821k–5,821k | 59 µs | 3.1 ms |
-| 4 producers, 64 KiB values | 2,846 (178 MiB/s) | 1.5k–6.3k | 596 µs | 84 ms |
-| No batching (batch 1) | 59,631 | 51k–82k | 39 µs | 129 µs |
-| `acks=quorum` (durable) | 27,761 | 23k–40k | 13.7 ms | 22.5 ms |
-| 3 brokers, replication factor 3 | 416,873 | 369k–512k | 169 µs | 16.7 ms |
-| Baseline: in-process mutex queue | 4,896,785 | 3,326k–5,370k | <1 µs | 14 µs |
+### Linux x86-64 — the validated platform
+
+GitHub-hosted runner: AMD EPYC 9V74, 4 logical cores, 15.6 GiB, ext4 on an
+Azure virtual disk, Ubuntu 24.04, kernel 6.17, GCC 13.3, `-O2 -g -DNDEBUG`.
+Median of 5 trials. Latency is **per produce request** — with `batch=100` one
+request carries 100 records, so these are not per-record figures.
+
+| Scenario | records/s | spread | p50 | p99 | p99.9 |
+|---|---:|---:|---:|---:|---:|
+| 4 producers, 8 partitions, batch 100 | 2,222,058 | ±3% | 147 µs | 498 µs | 605 µs |
+| 4 producers, 16-byte values, batch 200 | 4,316,447 | ±4% | 140 µs | 369 µs | 598 µs |
+| Single producer, 1 partition, batch 100 | 847,397 | ±1% | 103 µs | 187 µs | 474 µs |
+| 3 brokers, replication factor 3 | 1,023,623 | ±10% | 305 µs | 1,160 µs | 2,314 µs |
+| `acks=quorum` (durable, 3 replicas) | 224,446 | ±6% | 1,883 µs | 3,011 µs | 4,012 µs |
+| No batching (batch 1) | 44,851 | ±1% | 86 µs | 155 µs | 215 µs |
+| 4 producers, 64 KiB values | 5,458 (341 MiB/s) | ±37% | 679 µs | 1,794 µs | 508 ms |
+
+Cluster behaviour, same hardware, 3 brokers at replication factor 3:
+
+| Metric | Measured |
+|---|---|
+| Crash recovery after `SIGKILL` | 0.05 s to serve its full log again, 205,000 records intact |
+| Replication lag under sustained load | p50 8,100 records, p99 32,100 |
+| Followers caught up after load stopped | yes, within 1 ms |
+| Peak CPU across all three brokers | 62.7% of 4 cores |
+| Peak resident memory across all three | 41.7 MiB |
+| Disk written per 128-byte record | 484 B (3 replicas × ~155 B on the wire) |
 
 Reading these honestly:
 
-* **Batching is the dominant effect**: 32k → 1.34M records/s from batch 1 to
-  batch 100 on one producer, for 9 µs of added p50.
-* PulseLog reaches **51% of a bare mutex-protected in-memory queue** while
-  doing TCP framing, CRC-32C everywhere, offset assignment and durable
-  segmented storage.
-* **Durable mode is expensive on this machine** and misses the
-  low-single-digit-millisecond p99 target: `F_FULLFSYNC` on APFS dominates, and
-  background flushing measurably stalls concurrent appends
-  ([PERFORMANCE_RESULTS.md §5](docs/PERFORMANCE_RESULTS.md)).
-* **More partitions made throughput worse here** — one disk, more open files,
-  less batching per file.
+* **Batching is the dominant effect.** 44,851 → 2,186,478 records/s from batch
+  1 to batch 100, for 63 µs of added p50. Nothing else in this table moves
+  throughput by a comparable factor.
+* **`acks=leader` and `acks=none` are indistinguishable** (2,186,478 vs
+  2,220,648, inside a ±11% spread). That is not a surprise, it is the
+  definition: `acks=leader` means the record is in the leader's log, and does
+  not wait for a flush. Only `acks=quorum` waits for durability.
+* **Durability costs about 10× throughput and about 6× p99** on this hardware
+  (2.19M → 224k records/s, 452 µs → 3,011 µs). Where that time goes is broken
+  down below.
+* **More partitions did not help** — 2,222,058 across 8 partitions versus
+  2,186,478 across 4 is inside the spread.
+* **The 64 KiB p99.9 of 508 ms is real** and comes from segment rotation
+  colliding with a large write on a virtual disk. It is reported rather than
+  trimmed.
+
+### Where durable-mode latency actually goes
+
+The broker records the produce path in four stages, so a durable tail can be
+attributed instead of guessed at. Linux x86-64, `acks=quorum`, 3 replicas,
+p99 per stage:
+
+| Stage | p99 | Share |
+|---|---:|---|
+| Worker queue wait | 279 µs | 6% |
+| Log append | 131 µs | 3% |
+| **Leader's own fsync** | **3,299 µs** | **~60%** |
+| Waiting for a quorum to flush | 2,204 µs | ~30% |
+
+The leader's own fsync is the single largest term. Four tuning changes were
+measured against this baseline, each over 5 trials:
+
+| Change | records/s | vs baseline |
+|---|---:|---|
+| Baseline (2 ms / 200-record group commit) | 138,427 ±7% | — |
+| Tighter group commit (1 ms / 50 records) | 136,810 ±9% | no change (inside spread) |
+| Wider group commit (10 ms / 2000 records) | 73,808 ±8% | **47% slower** |
+| `fdatasync` instead of `fsync` | 130,308 ±11% | no improvement |
+| Preallocation disabled | 134,366 ±8% | no change (inside spread) |
+| fsync inside every append | 136,001 ±7% | p99 5× worse (23.6 ms) |
+
+**No configuration tested beat the default.** Two results are worth stating
+plainly rather than quietly dropping:
+
+* **`fdatasync` did not help.** The expected saving is the metadata write that
+  `fsync` performs and `fdatasync` skips; it did not show up above the noise
+  here. Disabling preallocation also made no measurable difference, which
+  points the same way — on this filesystem and virtual disk the data write
+  dominates and the metadata cost is not the bottleneck.
+* **Widening the group commit window made things worse, not better.** A longer
+  window means more records share an fsync, but every acknowledgement then
+  waits longer for that fsync to start. For a closed-loop producer that is a
+  straight loss.
+
+The durable p99 of 3.0 ms therefore stands as measured, with its cause
+identified, rather than being tuned down by weakening what an acknowledgement
+promises.
+
+### Apple M2 — development machine, not a benchmark host
+
+Reported separately and never merged with the Linux figures. This is a
+thermally constrained laptop, spreads reach ±80%, and macOS `F_FULLFSYNC` is a
+fundamentally different operation from Linux `fsync` (see
+[PORTABILITY.md](docs/PORTABILITY.md#2-durability-the-difference-that-matters-most)),
+so durable numbers are not comparable across the two at all.
+
+Apple M2 (8 cores), macOS 14.5, APFS, Apple clang 15, `-O2`, median of 5 trials:
+
+| Scenario | records/s | spread | p50 | p99 |
+|---|---:|---:|---:|---:|
+| 4 producers, 1 partition, batch 100 | 2,490,528 | 1,404k–2,795k | 76 µs | 2.4 ms |
+| Single producer, 1 partition, batch 100 | 1,036,382 | 823k–1,157k | 37 µs | 871 µs |
+| `acks=quorum` (durable) | 27,761 | 23k–40k | 13.7 ms | 22.5 ms |
+
+The durable figure is roughly 8× worse than Linux's, which is what
+`F_FULLFSYNC` costs on APFS. It is a property of the platform, not of the
+engine.
+
+### Baselines and micro-benchmarks
+
+An in-process, mutex-protected queue with no networking, no protocol, no
+checksums and no disk reaches 3,300,476 records/s on the same Linux host
+(±38%). It is included in the suite as a ceiling to measure against, not as a
+headline: it provides none of the guarantees PulseLog does, and the comparison
+says nothing about either system's absolute performance. See
+[BENCHMARKING.md](docs/BENCHMARKING.md) for what it does and does not tell you.
 
 Micro-benchmarks behind specific decisions: hardware CRC-32C is **5.2×** the
 software path, buffer pooling is **30×** cheaper than allocating per request,
 and fixing a per-record `pread` in the offset scan made lookups **18×** faster.
 
+### Reproducing all of it
+
 ```bash
-python3 scripts/run_benchmarks.py --trials=5 --out results
-python3 scripts/plot_results.py --results results --out results
+./scripts/benchmark_release.sh
 ```
+
+One command: verifies prerequisites, builds an optimised binary, records the
+hardware, runs every scenario in `benchmarks/config/release.json` for 5 trials,
+measures replication lag and recovery time, and writes JSON, CSV, charts and a
+report. The Linux figures above come from this script running in CI on every
+push; the raw artifacts are attached to each run.
 
 ---
 
