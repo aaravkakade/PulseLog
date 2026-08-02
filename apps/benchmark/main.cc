@@ -132,7 +132,7 @@ TrialResult RunProduce(const BenchConfig& config, bool with_consumers) {
         // Each consumer owns a slice of the partitions.
         std::vector<PartitionIndex> owned;
         for (std::int32_t p = c; p < config.partitions; p += config.consumers) {
-          owned.push_back(PartitionIndex{p});
+          owned.emplace_back(p);
         }
         std::vector<Offset> positions(owned.size(), 0);
 
@@ -168,7 +168,8 @@ TrialResult RunProduce(const BenchConfig& config, bool with_consumers) {
       client::ProducerConfig producer_config;
       producer_config.acks = config.acks;
       producer_config.batch_records = config.batch_size;
-      producer_config.batch_bytes = 16 * 1024 * 1024;  // Records, not bytes, drive batching here.
+      // Records, not bytes, drive batching here.
+      producer_config.batch_bytes = std::size_t{16} * 1024 * 1024;
       producer_config.request_timeout_ms = 30'000;
       client::Producer producer(context, producer_config);
 
@@ -328,6 +329,7 @@ void WriteJson(std::ostream& out,
   // The median trial is reported as the headline; every trial is included so a
   // reader can see the spread rather than trusting one number.
   std::vector<double> throughputs;
+  throughputs.reserve(trials.size());
   for (const auto& trial : trials) throughputs.push_back(trial.records_per_second);
   std::vector<double> sorted = throughputs;
   std::sort(sorted.begin(), sorted.end());
@@ -493,6 +495,9 @@ int main(int argc, char** argv) {
     auto value = flags.GetInt(key, fallback);
     if (!value.ok()) {
       std::cerr << "pulselog-bench: " << value.status().ToString() << '\n';
+      // Argument parsing runs on the main thread before any worker starts, so
+      // the thread-safety concern behind concurrency-mt-unsafe does not apply.
+      // NOLINTNEXTLINE(concurrency-mt-unsafe)
       std::exit(1);
     }
     return value.value();

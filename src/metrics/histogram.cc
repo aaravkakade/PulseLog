@@ -33,7 +33,7 @@ Histogram::Histogram(std::int64_t max_trackable, int significant_digits)
   sub_bucket_mask_ = static_cast<std::int64_t>(sub_bucket_count_) - 1;
 
   // How many power-of-two buckets are needed to reach max_trackable.
-  std::int64_t smallest_untrackable = static_cast<std::int64_t>(sub_bucket_count_);
+  auto smallest_untrackable = static_cast<std::int64_t>(sub_bucket_count_);
   bucket_count_ = 1;
   while (smallest_untrackable <= max_trackable_) {
     if (smallest_untrackable > INT64_MAX / 2) break;
@@ -43,7 +43,10 @@ Histogram::Histogram(std::int64_t max_trackable, int significant_digits)
 
   leading_zero_count_base_ = 64 - static_cast<std::int32_t>(precision_bits);
 
-  counts_len_ = static_cast<std::size_t>((bucket_count_ + 1) * sub_bucket_half_count_);
+  // Widen before multiplying, not after: casting the product would only
+  // convert a value that had already overflowed in int32.
+  counts_len_ = static_cast<std::size_t>(bucket_count_ + 1) *
+                static_cast<std::size_t>(sub_bucket_half_count_);
   counts_ = std::make_unique<std::atomic<std::uint64_t>[]>(counts_len_);
   for (std::size_t i = 0; i < counts_len_; ++i) {
     counts_[i].store(0, std::memory_order_relaxed);
@@ -51,17 +54,20 @@ Histogram::Histogram(std::int64_t max_trackable, int significant_digits)
 }
 
 std::size_t Histogram::IndexFor(std::int64_t value) const noexcept {
-  const auto masked = static_cast<std::uint64_t>(value | sub_bucket_mask_);
+  auto masked = static_cast<std::uint64_t>(value | sub_bucket_mask_);
   const std::int32_t bucket_index =
       leading_zero_count_base_ - ::pulselog::Narrow<std::int32_t>(std::countl_zero(masked));
-  const std::int32_t sub_bucket_index = static_cast<std::int32_t>(value >> bucket_index);
+  const auto sub_bucket_index = static_cast<std::int32_t>(value >> bucket_index);
 
   // The low half of every bucket above zero repeats the previous bucket, so
   // only the high half is stored; subtracting sub_bucket_half_count_ lands in
   // the right slot for both cases.
   const std::int32_t bucket_base_index = (bucket_index + 1) << sub_bucket_half_count_magnitude_;
   const std::int32_t offset_in_bucket = sub_bucket_index - sub_bucket_half_count_;
-  const auto index = static_cast<std::size_t>(bucket_base_index + offset_in_bucket);
+  // The sum is computed in int32 deliberately -- both terms are bounded by the
+  // bucket layout -- and widened once, after the add.
+  const auto index =
+      static_cast<std::size_t>(bucket_base_index) + static_cast<std::size_t>(offset_in_bucket);
   return index < counts_len_ ? index : counts_len_ - 1;
 }
 
@@ -116,8 +122,12 @@ std::int64_t Histogram::ValueAtPercentile(double percentile) const noexcept {
   if (total == 0) return 0;
 
   const double clamped = std::clamp(percentile, 0.0, 100.0);
-  // Round up so p99 of 100 samples is the 99th, not the 98th.
-  auto target = static_cast<std::uint64_t>((clamped / 100.0) * static_cast<double>(total) + 0.5);
+  // Round up so p99 of 100 samples is the 99th, not the 98th. llround rather
+  // than truncating (x + 0.5): the manual form rounds the wrong way for values
+  // that are already exactly representable, and is undefined once the sum
+  // exceeds the mantissa's exact-integer range.
+  auto target =
+      static_cast<std::uint64_t>(std::llround((clamped / 100.0) * static_cast<double>(total)));
   if (target == 0) target = 1;
   if (target > total) target = total;
 

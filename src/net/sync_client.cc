@@ -72,7 +72,7 @@ Status SyncClient::SendRequest(protocol::OpCode opcode, RequestId request_id, By
       return Status{ErrorCode::kClosed, "broker closed the connection during send"};
     }
     if (transfer->would_block) {
-      const Status status = WaitFor(/*readable=*/false, deadline);
+      Status status = WaitFor(/*readable=*/false, deadline);
       if (!status.ok()) return status;
       continue;
     }

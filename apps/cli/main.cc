@@ -56,7 +56,7 @@ int Fail(const Status& status) {
 
 std::string FormatBytes(std::int64_t bytes) {
   static const char* units[] = {"B", "KiB", "MiB", "GiB", "TiB"};
-  double value = static_cast<double>(bytes);
+  auto value = static_cast<double>(bytes);
   int unit = 0;
   while (value >= 1024.0 && unit < 4) {
     value /= 1024.0;

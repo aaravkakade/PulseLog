@@ -70,7 +70,7 @@ Result<std::unique_ptr<OffsetStore>> OffsetStore::Open(const std::filesystem::pa
   options.retention_ms = -1;
   options.flush.sync_on_append = sync_on_commit;
   options.flush.interval_ms = 200;
-  options.flush.max_unflushed_bytes = 256 * 1024;
+  options.flush.max_unflushed_bytes = 256LL * 1024;
   options.flush.max_unflushed_records = 100;
 
   PL_ASSIGN_OR_RETURN(auto log,

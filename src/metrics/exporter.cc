@@ -81,13 +81,13 @@ Status MetricsExporter::Start() {
   }
 
   if (::bind(listen_fd_, reinterpret_cast<::sockaddr*>(&addr), sizeof(addr)) != 0) {
-    const Status status = ErrnoToStatus("bind metrics port " + std::to_string(port_), errno);
+    Status status = ErrnoToStatus("bind metrics port " + std::to_string(port_), errno);
     ::close(listen_fd_);
     listen_fd_ = -1;
     return status;
   }
   if (::listen(listen_fd_, 16) != 0) {
-    const Status status = ErrnoToStatus("listen", errno);
+    Status status = ErrnoToStatus("listen", errno);
     ::close(listen_fd_);
     listen_fd_ = -1;
     return status;

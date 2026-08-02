@@ -331,7 +331,7 @@ Status Broker::Start() {
   workers_.reserve(config_.worker_threads);
   for (std::size_t i = 0; i < config_.worker_threads; ++i) {
     BufferPoolOptions pool_options;
-    pool_options.default_capacity = 256 * 1024;
+    pool_options.default_capacity = std::size_t{256} * 1024;
     pool_options.max_pooled = 128;
     worker_pools_.push_back(std::make_unique<BufferPool>(pool_options));
 

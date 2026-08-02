@@ -25,7 +25,7 @@ struct SyncClientOptions {
   std::int64_t connect_timeout_ms = 5000;
   std::int64_t request_timeout_ms = 10'000;
   std::uint32_t max_frame_bytes = protocol::kMaxPayloadBytesDefault;
-  std::size_t read_chunk_bytes = 64 * 1024;
+  std::size_t read_chunk_bytes = std::size_t{64} * 1024;
 };
 
 class SyncClient {

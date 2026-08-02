@@ -113,6 +113,11 @@ class BoundedMpmcQueue {
   [[nodiscard]] std::size_t Capacity() const noexcept { return mask_ + 1; }
 
  private:
+  // `storage` is deliberately uninitialised: it is raw storage for a T that is
+  // placement-new'd on enqueue. Zeroing it would write the whole ring at
+  // construction for no benefit, and a T is only ever read back through
+  // Construct/Destroy, which the sequence number gates.
+  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-member-init)
   struct Cell {
     std::atomic<std::size_t> sequence;
     alignas(T) std::byte storage[sizeof(T)];

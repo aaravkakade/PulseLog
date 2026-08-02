@@ -201,7 +201,7 @@ Status Consumer::Leave() {
       connection->Call(
           protocol::OpCode::kLeaveGroup, context_.NextRequestId(), scratch_.Readable()));
   protocol::LeaveGroupResponse response;
-  const Status status = ClientContext::DecodeResponse(frame.payload, response);
+  Status status = ClientContext::DecodeResponse(frame.payload, response);
 
   member_id_.clear();
   generation_ = Generation{-1};

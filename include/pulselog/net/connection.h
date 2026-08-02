@@ -48,10 +48,10 @@ using FrameCallback = std::function<void(Connection&, const protocol::FrameDecod
 using CloseCallback = std::function<void(Connection&, const Status&)>;
 
 struct ConnectionOptions {
-  std::size_t read_chunk_bytes = 64 * 1024;
-  std::size_t output_high_water_bytes = 4 * 1024 * 1024;
-  std::size_t output_low_water_bytes = 1 * 1024 * 1024;
-  std::size_t output_max_bytes = 64 * 1024 * 1024;
+  std::size_t read_chunk_bytes = std::size_t{64} * 1024;
+  std::size_t output_high_water_bytes = std::size_t{4} * 1024 * 1024;
+  std::size_t output_low_water_bytes = std::size_t{1} * 1024 * 1024;
+  std::size_t output_max_bytes = std::size_t{64} * 1024 * 1024;
   std::uint32_t max_frame_bytes = protocol::kMaxPayloadBytesDefault;
   // A connection with no traffic for this long is closed. 0 disables.
   std::int64_t idle_timeout_ms = 0;

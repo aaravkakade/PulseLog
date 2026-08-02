@@ -131,7 +131,7 @@ std::uint32_t Crc32cSoftware(std::span<const std::uint8_t> data, std::uint32_t s
   // lookups, which the out-of-order engine can overlap.
   while (n >= 8) {
     crc ^= LoadLe<std::uint32_t>(p);
-    const std::uint32_t next = LoadLe<std::uint32_t>(p + 4);
+    const auto next = LoadLe<std::uint32_t>(p + 4);
     crc = kTables[7][crc & 0xFFU] ^ kTables[6][(crc >> 8U) & 0xFFU] ^
           kTables[5][(crc >> 16U) & 0xFFU] ^ kTables[4][(crc >> 24U) & 0xFFU] ^
           kTables[3][next & 0xFFU] ^ kTables[2][(next >> 8U) & 0xFFU] ^

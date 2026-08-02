@@ -102,12 +102,14 @@ int main(int argc, char** argv) {
     return 1;
   }
 
-  // Handle the signals a container runtime and a shell actually send.
-  std::signal(SIGINT, HandleSignal);
-  std::signal(SIGTERM, HandleSignal);
+  // Handle the signals a container runtime and a shell actually send. The
+  // previous handler is discarded on purpose: nothing here restores it, and
+  // the process owns these signals for its whole lifetime.
+  (void)std::signal(SIGINT, HandleSignal);
+  (void)std::signal(SIGTERM, HandleSignal);
   // Sockets are configured to suppress SIGPIPE, but ignoring it globally
   // guards any path that is not.
-  std::signal(SIGPIPE, SIG_IGN);
+  (void)std::signal(SIGPIPE, SIG_IGN);
 
   broker::Broker instance(std::move(config).value());
   const Status started = instance.Start();

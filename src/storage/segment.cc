@@ -334,7 +334,7 @@ Result<std::uint64_t> Segment::PositionFor(Offset offset) const {
 
     std::size_t block_pos = 0;
     while (current < offset && block_pos + 4 <= got) {
-      const std::uint32_t length = LoadLe<std::uint32_t>(block.data() + block_pos);
+      const auto length = LoadLe<std::uint32_t>(block.data() + block_pos);
       const std::uint64_t record_size = static_cast<std::uint64_t>(length) + 4;
       if (record_size < protocol::kRecordFixedPrefix ||
           position + block_pos + record_size > limit) {
@@ -350,7 +350,7 @@ Result<std::uint64_t> Segment::PositionFor(Offset offset) const {
     if (block_pos == 0) {
       // The record at `position` is larger than the block. Grow once to fit
       // it exactly rather than guessing.
-      const std::uint32_t length = LoadLe<std::uint32_t>(block.data());
+      const auto length = LoadLe<std::uint32_t>(block.data());
       const std::uint64_t record_size = static_cast<std::uint64_t>(length) + 4;
       if (record_size < protocol::kRecordFixedPrefix || record_size > protocol::kMaxRecordBytes ||
           position + record_size > limit) {
@@ -408,7 +408,7 @@ Result<Segment::ReadResult> Segment::Read(Offset from,
 
     const std::uint64_t chunk_limit = kRecoveryChunkBytes;
     const std::uint64_t budget_limit = budget_left;
-    std::size_t want =
+    auto want =
         Narrow<std::size_t>(std::min<std::uint64_t>({chunk_limit, limit - cursor, budget_limit}));
     if (want < next_record_size) {
       // The budget cannot hold this record. Returning at least one record

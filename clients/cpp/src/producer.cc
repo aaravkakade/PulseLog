@@ -229,7 +229,7 @@ Result<DeliveryResult> Producer::SendBatch(const std::string& topic,
 Result<DeliveryResult> Producer::Flush() {
   if (pending_count_ == 0) return DeliveryResult{};
 
-  const std::uint32_t count = static_cast<std::uint32_t>(pending_count_);
+  auto count = static_cast<std::uint32_t>(pending_count_);
   const std::string topic = pending_topic_;
   const PartitionIndex partition = pending_partition_;
 

@@ -138,7 +138,7 @@ Status ParseRecord(
     return OutOfRange("truncated record header at byte " + std::to_string(pos));
   }
 
-  const std::uint32_t length = LoadLe<std::uint32_t>(data.data() + pos + kOffLength);
+  const auto length = LoadLe<std::uint32_t>(data.data() + pos + kOffLength);
   if (length < kRecordFixedPrefix - 4) {
     return Corruption("record length " + std::to_string(length) + " is below the minimum");
   }
@@ -153,7 +153,7 @@ Status ParseRecord(
 
   const std::uint8_t* base = data.data() + pos;
   if (verify_crc) {
-    const std::uint32_t stored = LoadLe<std::uint32_t>(base + kOffCrc);
+    const auto stored = LoadLe<std::uint32_t>(base + kOffCrc);
     const std::uint32_t computed = Crc32c(base + kOffOffset, total - kOffOffset);
     if (stored != computed) {
       return Corruption("record checksum mismatch at byte " + std::to_string(pos));

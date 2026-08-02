@@ -27,6 +27,10 @@ class StrongId {
 
   [[nodiscard]] constexpr bool valid() const noexcept { return value_ >= 0; }
 
+  // clang-tidy 14 reports modernize-use-nullptr against the compiler-
+  // synthesised body of this defaulted comparison, which contains no pointer
+  // this code could change.
+  // NOLINTNEXTLINE(modernize-use-nullptr)
   friend constexpr auto operator<=>(const StrongId&, const StrongId&) noexcept = default;
 
  private:
@@ -165,7 +169,7 @@ template<>
 struct hash<::pulselog::TopicPartition> {
   std::size_t operator()(const ::pulselog::TopicPartition& tp) const noexcept {
     const std::size_t h1 = std::hash<std::string>{}(tp.topic);
-    const std::size_t h2 = static_cast<std::size_t>(tp.partition.value());
+    auto h2 = static_cast<std::size_t>(tp.partition.value());
     return h1 ^ (h2 * 0x9E3779B97F4A7C15ULL);
   }
 };

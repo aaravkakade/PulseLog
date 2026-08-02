@@ -126,7 +126,7 @@ Status Replicator::Sender::EnsureConnected() {
     return NotFound("broker " + std::to_string(peer_.value()) + " is not in the cluster config");
   }
 
-  const Status status = client_.Connect(net::Endpoint{endpoint->host, endpoint->port});
+  Status status = client_.Connect(net::Endpoint{endpoint->host, endpoint->port});
   if (!status.ok()) {
     connected_ = false;
     return status;

@@ -36,7 +36,7 @@ void EncodeFrameHeader(const FrameHeader& header, std::uint8_t* dst) noexcept {
 }
 
 Result<FrameHeader> DecodeFrameHeader(const std::uint8_t* src, std::uint32_t max_payload) {
-  const std::uint32_t magic = LoadLe<std::uint32_t>(src + kOffMagic);
+  const auto magic = LoadLe<std::uint32_t>(src + kOffMagic);
   if (magic != kFrameMagic) {
     return ProtocolError("bad frame magic: expected 0x" + std::to_string(kFrameMagic) + ", got 0x" +
                          std::to_string(magic));
@@ -45,13 +45,13 @@ Result<FrameHeader> DecodeFrameHeader(const std::uint8_t* src, std::uint32_t max
   // The header CRC is checked before any other field is trusted. In
   // particular, acting on a corrupt payload_len would desynchronise the
   // stream permanently.
-  const std::uint32_t stored_crc = LoadLe<std::uint32_t>(src + kOffHeaderCrc);
+  const auto stored_crc = LoadLe<std::uint32_t>(src + kOffHeaderCrc);
   const std::uint32_t computed_crc = Crc32c(src, kOffHeaderCrc);
   if (stored_crc != computed_crc) {
     return Status{ErrorCode::kCorruption, "frame header checksum mismatch"};
   }
 
-  const std::uint16_t reserved = LoadLe<std::uint16_t>(src + kOffReserved);
+  const auto reserved = LoadLe<std::uint16_t>(src + kOffReserved);
   if (reserved != 0) {
     // Reserved bits are how a future version signals a change that an old
     // decoder must not silently ignore.
@@ -68,7 +68,7 @@ Result<FrameHeader> DecodeFrameHeader(const std::uint8_t* src, std::uint32_t max
                       std::to_string(kProtocolVersion) + ")"};
   }
 
-  const std::uint16_t raw_opcode = LoadLe<std::uint16_t>(src + kOffOpcode);
+  const auto raw_opcode = LoadLe<std::uint16_t>(src + kOffOpcode);
   if (!IsKnownOpCode(raw_opcode)) {
     return ProtocolError("unknown opcode " + std::to_string(raw_opcode));
   }
@@ -143,7 +143,7 @@ FrameDecoder::State FrameDecoder::Next(ByteSpan input, Frame& out) {
 
 std::size_t FrameDecoder::BytesNeeded(ByteSpan input) const noexcept {
   if (input.size() < kFrameHeaderSize) return kFrameHeaderSize - input.size();
-  const std::uint32_t payload_len = LoadLe<std::uint32_t>(input.data() + kOffPayloadLen);
+  const auto payload_len = LoadLe<std::uint32_t>(input.data() + kOffPayloadLen);
   const std::size_t total = kFrameHeaderSize + payload_len;
   return input.size() >= total ? 0 : total - input.size();
 }

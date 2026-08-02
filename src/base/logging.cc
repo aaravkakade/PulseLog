@@ -36,9 +36,12 @@ void FormatTimestamp(std::array<char, 32>& out) {
   const auto millis = std::chrono::duration_cast<std::chrono::milliseconds>(now - secs).count();
   const std::time_t tt = std::chrono::system_clock::to_time_t(secs);
   std::tm tm_buf{};
-  ::gmtime_r(&tt, &tm_buf);
-  std::size_t n = std::strftime(out.data(), out.size(), "%Y-%m-%dT%H:%M:%S", &tm_buf);
-  std::snprintf(out.data() + n, out.size() - n, ".%03dZ", static_cast<int>(millis));
+  (void)::gmtime_r(&tt, &tm_buf);
+  // Return values discarded throughout this function: it formats a log line,
+  // and there is nowhere useful to report a formatting failure to. A truncated
+  // timestamp is strictly better than recursing into the logger.
+  const std::size_t n = std::strftime(out.data(), out.size(), "%Y-%m-%dT%H:%M:%S", &tm_buf);
+  (void)std::snprintf(out.data() + n, out.size() - n, ".%03dZ", static_cast<int>(millis));
 }
 
 }  // namespace
@@ -53,29 +56,29 @@ void Emit(LogLevel level, std::string_view component, std::string_view message) 
   std::lock_guard<std::mutex> lock(OutputMutex());
   std::FILE* out = OutputFile();
   if (broker >= 0) {
-    std::fprintf(out,
-                 "%s %-5.*s broker=%d [%.*s] %.*s\n",
-                 timestamp.data(),
-                 static_cast<int>(level_name.size()),
-                 level_name.data(),
-                 broker,
-                 static_cast<int>(component.size()),
-                 component.data(),
-                 static_cast<int>(message.size()),
-                 message.data());
+    (void)std::fprintf(out,
+                       "%s %-5.*s broker=%d [%.*s] %.*s\n",
+                       timestamp.data(),
+                       static_cast<int>(level_name.size()),
+                       level_name.data(),
+                       broker,
+                       static_cast<int>(component.size()),
+                       component.data(),
+                       static_cast<int>(message.size()),
+                       message.data());
   } else {
-    std::fprintf(out,
-                 "%s %-5.*s [%.*s] %.*s\n",
-                 timestamp.data(),
-                 static_cast<int>(level_name.size()),
-                 level_name.data(),
-                 static_cast<int>(component.size()),
-                 component.data(),
-                 static_cast<int>(message.size()),
-                 message.data());
+    (void)std::fprintf(out,
+                       "%s %-5.*s [%.*s] %.*s\n",
+                       timestamp.data(),
+                       static_cast<int>(level_name.size()),
+                       level_name.data(),
+                       static_cast<int>(component.size()),
+                       component.data(),
+                       static_cast<int>(message.size()),
+                       message.data());
   }
   // Errors are flushed immediately so a crash does not swallow the reason.
-  if (level >= LogLevel::kError) std::fflush(out);
+  if (level >= LogLevel::kError) (void)std::fflush(out);
 }
 
 }  // namespace logging_detail
@@ -133,20 +136,20 @@ bool SetLogFile(const std::string& path) {
   std::lock_guard<std::mutex> lock(logging_detail::OutputMutex());
   std::FILE*& out = logging_detail::OutputFile();
   if (path.empty()) {
-    if (out != stderr && out != nullptr) std::fclose(out);
+    if (out != stderr && out != nullptr) (void)std::fclose(out);
     out = stderr;
     return true;
   }
   std::FILE* file = std::fopen(path.c_str(), "ae");
   if (file == nullptr) return false;
-  if (out != stderr && out != nullptr) std::fclose(out);
+  if (out != stderr && out != nullptr) (void)std::fclose(out);
   out = file;
   return true;
 }
 
 void FlushLogs() {
   std::lock_guard<std::mutex> lock(logging_detail::OutputMutex());
-  std::fflush(logging_detail::OutputFile());
+  (void)std::fflush(logging_detail::OutputFile());
 }
 
 }  // namespace pulselog

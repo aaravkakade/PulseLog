@@ -194,7 +194,7 @@ struct ProducerConfig {
   // Flush() is called. `linger_ms = 0` with `batch_size = 1` sends
   // immediately, which is the lowest-latency and lowest-throughput setting.
   std::size_t batch_records = 1;
-  std::size_t batch_bytes = 64 * 1024;
+  std::size_t batch_bytes = std::size_t{64} * 1024;
   std::int64_t linger_ms = 0;
   // Explicit partition, or -1 to route by key.
   std::int32_t forced_partition = -1;

@@ -133,7 +133,7 @@ std::vector<std::string> ConfigStore::LoadCommandLine(int argc, const char* cons
   return positional;
 }
 
-void ConfigStore::Set(std::string key, std::string value) {
+void ConfigStore::Set(const std::string& key, std::string value) {
   entries_[ToLower(key)] = std::move(value);
 }
 

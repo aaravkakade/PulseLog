@@ -42,7 +42,7 @@ void EncodeInto(ByteBuffer& out, const Response& response) {
 // --- io-thread entry points -------------------------------------------------
 
 void Broker::OnFrame(net::Connection& connection, const protocol::FrameDecoder::Frame& frame) {
-  const std::size_t loop_index = static_cast<std::size_t>(connection.loop().index());
+  auto loop_index = static_cast<std::size_t>(connection.loop().index());
   if (loop_index < loop_connections_.size()) {
     // Registered lazily on first use; the map is touched only by this loop's
     // own thread, so it needs no lock.
@@ -74,7 +74,7 @@ void Broker::OnFrame(net::Connection& connection, const protocol::FrameDecoder::
 }
 
 void Broker::OnConnectionClosed(net::Connection& connection, const Status& reason) {
-  const std::size_t loop_index = static_cast<std::size_t>(connection.loop().index());
+  auto loop_index = static_cast<std::size_t>(connection.loop().index());
   if (loop_index < loop_connections_.size()) {
     loop_connections_[loop_index].erase(connection.id());
   }
@@ -96,7 +96,7 @@ std::optional<std::size_t> Broker::WorkerForRequest(const protocol::FrameDecoder
 void Broker::RouteToWorker(net::Connection& connection,
                            const protocol::FrameDecoder::Frame& frame,
                            std::size_t worker_index) {
-  const std::size_t loop_index = static_cast<std::size_t>(connection.loop().index());
+  auto loop_index = static_cast<std::size_t>(connection.loop().index());
 
   WorkerRequest request;
   request.opcode = frame.header.opcode;
@@ -606,8 +606,9 @@ void Broker::ExecuteProduce(WorkerRequest& request) {
                         append_time,
                         started,
                         append_finished,
-                        ack_mode](
-                           Status status, Offset high_water_mark, std::int64_t local_flush_nanos) {
+                        ack_mode](const Status& status,
+                                  Offset high_water_mark,
+                                  std::int64_t local_flush_nanos) {
     protocol::ProduceResponse response;
     if (!status.ok()) {
       response.header.error = status.code();

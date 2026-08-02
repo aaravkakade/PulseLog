@@ -146,8 +146,8 @@ class ByteBuffer {
 // and did not move the number, so the simpler structure was kept.
 struct BufferPoolOptions {
   std::size_t max_pooled = 256;  // Buffers retained when idle.
-  std::size_t default_capacity = 64 * 1024;
-  std::size_t max_retained_capacity = 1024 * 1024;  // Larger buffers are shrunk.
+  std::size_t default_capacity = std::size_t{64} * 1024;
+  std::size_t max_retained_capacity = std::size_t{1024} * 1024;  // Larger buffers are shrunk.
 };
 
 class BufferPool {
@@ -215,7 +215,15 @@ class PooledBuffer {
 
   ByteBuffer& operator*() noexcept { return *buffer_; }
 
+  // Const overloads so a const PooledBuffer can still be read. Without them
+  // `chunk.buffer->Readable()` fails on a const chunk and every read site has
+  // to detour through get(), which reads as though the pointer were being
+  // extracted for something else.
+  const ByteBuffer& operator*() const noexcept { return *buffer_; }
+
   ByteBuffer* operator->() noexcept { return buffer_.get(); }
+
+  const ByteBuffer* operator->() const noexcept { return buffer_.get(); }
 
   [[nodiscard]] ByteBuffer* get() noexcept { return buffer_.get(); }
 

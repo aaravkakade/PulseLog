@@ -175,7 +175,7 @@ void Connection::FlushOutput() {
     std::size_t chunk_count = 0;
     for (const auto& chunk : output_) {
       if (chunk_count == chunks.size()) break;
-      const ByteSpan readable = chunk.buffer.get()->Readable();
+      const ByteSpan readable = chunk.buffer->Readable();
       chunks[chunk_count++] = readable.subspan(chunk.sent);
     }
 
@@ -203,7 +203,7 @@ void Connection::FlushOutput() {
     output_bytes_ -= transfer->bytes;
     while (remaining > 0 && !output_.empty()) {
       OutputChunk& front = output_.front();
-      const std::size_t pending = front.buffer.get()->ReadableBytes() - front.sent;
+      const std::size_t pending = front.buffer->ReadableBytes() - front.sent;
       if (remaining >= pending) {
         remaining -= pending;
         output_.pop_front();

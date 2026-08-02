@@ -38,8 +38,8 @@ struct BrokerConfig {
   std::size_t max_connections = 4096;
   std::uint32_t max_frame_bytes = 64U * 1024 * 1024;
   std::int64_t connection_idle_timeout_ms = 0;  // 0 disables.
-  std::size_t output_high_water_bytes = 4U * 1024 * 1024;
-  std::size_t output_max_bytes = 64U * 1024 * 1024;
+  std::size_t output_high_water_bytes = std::size_t{4} * 1024 * 1024;
+  std::size_t output_max_bytes = std::size_t{64} * 1024 * 1024;
 
   // --- workers --------------------------------------------------------------
   std::size_t worker_threads = 2;

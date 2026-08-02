@@ -55,7 +55,8 @@ struct DurabilityWaiter {
   std::int64_t deadline_ms = 0;
   // The third argument is local_flush_nanos below: the callback needs it to
   // attribute its wait, and by the time it runs the waiter has been moved.
-  std::function<void(Status, Offset high_water_mark, std::int64_t local_flush_nanos)> on_complete;
+  std::function<void(const Status&, Offset high_water_mark, std::int64_t local_flush_nanos)>
+      on_complete;
 
   // Stage timestamps for the latency breakdown, monotonic nanoseconds; zero
   // means the stage was not reached. local_flush_nanos is stamped the first

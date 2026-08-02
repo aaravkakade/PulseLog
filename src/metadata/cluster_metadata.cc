@@ -422,7 +422,7 @@ Status ClusterMetadata::LoadFrom(const std::filesystem::path& path) {
       for (const auto& replica : Split(fields[5], ',')) {
         std::int32_t id = 0;
         if (!replica.empty() && ParseNumber(replica, id)) {
-          assignment.replicas.push_back(BrokerId{id});
+          assignment.replicas.emplace_back(id);
         }
       }
       assignment.in_sync_replicas = assignment.replicas;

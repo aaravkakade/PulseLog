@@ -41,7 +41,7 @@ class ConfigStore {
   // implement subcommands.
   std::vector<std::string> LoadCommandLine(int argc, const char* const argv[]);
 
-  void Set(std::string key, std::string value);
+  void Set(const std::string& key, std::string value);
 
   [[nodiscard]] bool Contains(std::string_view key) const;
 
