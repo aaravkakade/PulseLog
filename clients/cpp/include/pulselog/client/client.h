@@ -200,8 +200,14 @@ class Producer {
 
   ~Producer();
 
-  // Publishes one record. With batching enabled this may only buffer it; the
-  // returned result is empty until the batch is actually sent.
+  // Publishes one record.
+  //
+  // With batching enabled this usually only buffers, returning a result with
+  // `record_count == 0`. When the call does send a batch -- because a
+  // threshold was reached, or because this record targets a different
+  // partition and flushed the previous batch -- the returned result describes
+  // that batch. Summing `record_count` over every return value therefore
+  // accounts for every record the broker acknowledged.
   [[nodiscard]] Result<DeliveryResult> Send(const std::string& topic,
                                             const OutboundRecord& record);
 
@@ -246,6 +252,9 @@ class Producer {
   ByteBuffer scratch_;
   Stats stats_;
   std::uint64_t round_robin_ = 0;
+  // Current sticky partition for keyless records; advanced only when a batch
+  // is sent, so batching actually accumulates.
+  PartitionIndex sticky_partition_{0};
 };
 
 struct ConsumerConfig {
