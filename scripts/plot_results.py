@@ -152,11 +152,15 @@ def load_results(directory: Path) -> list[dict]:
 
 def markdown_table(results: list[dict]) -> str:
     rows = [
-        "| Scenario | Config | records/s | MiB/s | p50 | p99 | p99.9 | max | err |",
+        "| Scenario | Config | records/s (median) | spread | MiB/s | p50 | p99 | p99.9 | err |",
         "|---|---|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for result in results:
         trial = median_trial(result)
+        ordered = sorted(result["trials"], key=lambda t: t["records_per_second"])
+        spread = (f"{ordered[0]['records_per_second']:,.0f}-"
+                  f"{ordered[-1]['records_per_second']:,.0f}"
+                  if len(ordered) > 1 else "-")
         config = result["config"]
         latency = trial["latency_nanos"]
         summary = (
@@ -168,11 +172,11 @@ def markdown_table(results: list[dict]) -> str:
             f"| {result.get('name', result['scenario'])} "
             f"| `{summary}` "
             f"| {trial['records_per_second']:,.0f} "
+            f"| {spread} "
             f"| {trial['megabytes_per_second']:,.1f} "
             f"| {latency['p50'] / 1000:,.0f} us "
             f"| {latency['p99'] / 1000:,.0f} us "
             f"| {latency['p999'] / 1000:,.0f} us "
-            f"| {latency['max'] / 1000:,.0f} us "
             f"| {trial['errors']} |"
         )
     return "\n".join(rows)

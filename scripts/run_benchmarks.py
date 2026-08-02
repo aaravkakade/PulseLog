@@ -57,6 +57,9 @@ class Scenario:
     replication: int = 1
     scenario: str = "produce"
     durable: bool = False
+    # Extra broker flags. Used to select the fsync mode, which changes what a
+    # flush promises and therefore what the numbers mean.
+    broker_flags: list = field(default_factory=list)
 
 
 def build_scenarios(quick: bool) -> list[Scenario]:
@@ -137,7 +140,14 @@ def build_scenarios(quick: bool) -> list[Scenario]:
              "record-size": 128, "batch-size": 100, "acks": "none"},
         ),
         Scenario(
-            "12-baseline-mutex-queue",
+            "12-fsync-full-vs-data",
+            "acks=leader with fsync mode 'data' rather than 'full'",
+            {"partitions": 4, "producers": 4, "records": n(400_000, 60_000),
+             "record-size": 128, "batch-size": 100, "acks": "leader"},
+            broker_flags=["--storage.fsync.mode=data"],
+        ),
+        Scenario(
+            "13-baseline-mutex-queue",
             "In-process mutex-protected queue: no network, no protocol, no disk",
             {"producers": 4, "records": n(400_000, 60_000), "record-size": 128},
             scenario="baseline-mutex",
@@ -149,12 +159,13 @@ class BrokerCluster:
     """Starts and stops a cluster of real broker processes."""
 
     def __init__(self, binary: Path, count: int, data_root: Path, durable: bool,
-                 verbose: bool):
+                 verbose: bool, extra_flags: list[str] | None = None):
         self.binary = binary
         self.count = count
         self.data_root = data_root
         self.durable = durable
         self.verbose = verbose
+        self.extra_flags = list(extra_flags or [])
         self.ports = [free_port() for _ in range(count)]
         self.metrics_ports = [free_port() for _ in range(count)]
         self.processes: list[subprocess.Popen] = []
@@ -189,8 +200,13 @@ class BrokerCluster:
                 # Quorum acks are only meaningful when a flush actually
                 # happens promptly; a 200 ms default would measure the timer,
                 # not the engine.
-                args.append("--storage.flush.interval=5ms")
-                args.append("--storage.flush.max.records=500")
+                args.append("--storage.flush.interval=2ms")
+                args.append("--storage.flush.max.records=200")
+                # The flusher thread's tick sets the floor on acknowledgement
+                # latency for quorum writes. A 20 ms default would measure the
+                # timer rather than the engine.
+                args.append("--storage.flusher.interval=1ms")
+            args.extend(self.extra_flags)
 
             log_file = open(log_path, "w")
             self.processes.append(
@@ -242,7 +258,8 @@ def run_scenario(bench: Path, broker: Path, scenario: Scenario, out_dir: Path,
         try:
             if scenario.scenario != "baseline-mutex":
                 cluster = BrokerCluster(
-                    broker, scenario.brokers, data_root, scenario.durable, verbose
+                    broker, scenario.brokers, data_root, scenario.durable, verbose,
+                    scenario.broker_flags,
                 )
                 cluster.start()
 
@@ -290,23 +307,32 @@ def run_scenario(bench: Path, broker: Path, scenario: Scenario, out_dir: Path,
 
 
 def summarise(results: list[dict]) -> str:
+    """Median throughput plus the spread across trials.
+
+    The spread is printed, not hidden behind the median. Some of these
+    scenarios vary by 2-3x run to run because background flushing periodically
+    stalls the append path, and a table that showed only a median would imply a
+    precision the measurement does not have.
+    """
     header = (
-        f"{'scenario':<38} {'records/s':>12} {'MiB/s':>9} "
-        f"{'p50 us':>9} {'p99 us':>10} {'errors':>7}"
+        f"{'scenario':<38} {'records/s':>12} {'min-max':>21} "
+        f"{'p50 us':>9} {'p99 us':>10} {'err':>5}"
     )
     lines = [header, "-" * len(header)]
     for result in results:
         trials = result["trials"]
-        # The median trial is the headline; every trial is in the JSON.
         trials_sorted = sorted(trials, key=lambda t: t["records_per_second"])
         trial = trials_sorted[len(trials_sorted) // 2]
+        low = trials_sorted[0]["records_per_second"]
+        high = trials_sorted[-1]["records_per_second"]
+        spread = f"{low:,.0f}-{high:,.0f}" if len(trials) > 1 else "-"
         lines.append(
             f"{result.get('name', result['scenario']):<38} "
             f"{trial['records_per_second']:>12,.0f} "
-            f"{trial['megabytes_per_second']:>9,.1f} "
+            f"{spread:>21} "
             f"{trial['latency_nanos']['p50'] / 1000:>9,.0f} "
             f"{trial['latency_nanos']['p99'] / 1000:>10,.0f} "
-            f"{trial['errors']:>7}"
+            f"{trial['errors']:>5}"
         )
     return "\n".join(lines)
 
