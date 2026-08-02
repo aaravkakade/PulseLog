@@ -8,32 +8,77 @@ follows so that the numbers mean something.
 
 ## 1. Quick start
 
+One command produces a complete, reproducible report:
+
 ```bash
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo
-cmake --build build -j
+./scripts/benchmark_release.sh
+```
 
-# The full suite: 13 scenarios, 5 trials each, real broker processes.
+It verifies prerequisites, builds an optimised binary, records the exact
+hardware and build flags, runs every scenario for 5 trials, measures the
+cluster costs a throughput figure hides, and writes JSON, CSV, charts and a
+report into `results/`:
+
+| File | Contents |
+|---|---|
+| `REPORT.md` | the report, with hardware and methodology attached |
+| `report.html` | the same thing, standalone, charts inlined |
+| `results.csv` | one row per trial — the raw data, before aggregation |
+| `summary.csv` | one row per scenario: median, min, max, stdev, spread |
+| `metadata.json` | CPU, memory, storage, kernel, compiler, flags, commit |
+| `cluster_metrics.json` | replication lag, recovery time, CPU, memory, disk |
+| `<NN>-<scenario>.json` | per-scenario results including every trial |
+
+Useful options:
+
+```bash
+./scripts/benchmark_release.sh --trials 10       # more trials, tighter spread
+./scripts/benchmark_release.sh --out results-a   # somewhere else
+./scripts/benchmark_release.sh --skip-build      # reuse an existing build
+./scripts/benchmark_release.sh --quick           # pipeline check ONLY, see below
+```
+
+`--quick` shortens every run so the pipeline can be exercised in a couple of
+minutes. **Its numbers are not publishable** — the windows are too short to be
+stable — and both the script and the generated report say so.
+
+### The individual pieces
+
+`benchmark_release.sh` orchestrates four scripts that are also useful alone:
+
+```bash
+# The scenario suite. Parameters come from benchmarks/config/release.json.
 python3 scripts/run_benchmarks.py --trials=5 --out results
+python3 scripts/run_benchmarks.py --only=06-quorum,07-replication --trials=3
 
-# Charts and a Markdown table.
+# Host and build metadata, printed and optionally written as JSON.
+python3 scripts/bench_metadata.py --build-dir build
+
+# Replication lag, recovery time, CPU, memory and disk, on a real 3-broker
+# cluster. Lag is sampled *during* load; an idle cluster is always caught up.
+python3 scripts/bench_cluster_metrics.py --build-dir build
+
+# Where durable-mode latency actually goes, plus a sweep of the settings that
+# plausibly move it: group-commit window, fsync vs fdatasync, preallocation.
+python3 scripts/profile_durability.py --build-dir build --trials 5
+
+# CSV export, percentiles, spread, Markdown and HTML.
+python3 scripts/bench_report.py --results results --out results
+
+# Charts.
 python3 scripts/plot_results.py --results results --out results
 
-# Micro-benchmarks.
+# Micro-benchmarks (Google Benchmark).
 ./build/bin/bench_core
 ./build/bin/bench_storage
 ```
 
-A quick sanity run, with smaller record counts:
+### Where the scenario parameters live
 
-```bash
-python3 scripts/run_benchmarks.py --quick --trials=1
-```
-
-One scenario at a time:
-
-```bash
-python3 scripts/run_benchmarks.py --only=06-quorum,07-replication --trials=3
-```
+`benchmarks/config/release.json`, in version control. Changing a record count,
+an ack level or a batch size changes what a published number *means*, so the
+change shows up in review rather than in someone's shell history. The runner
+reads that file; it has no scenario parameters of its own.
 
 ---
 
@@ -183,4 +228,39 @@ xcrun xctrace record --template 'Time Profiler' --attach $(pgrep pulselog-broker
 * The 3-broker scenarios are three processes on one host sharing one disk and
   the loopback interface. That flatters the network and penalises the disk.
 * The machine matters more than anything else here: a thermally constrained
-  laptop is not a server.
+  laptop is not a server. Results from different machines are reported in
+  separate sections and never averaged.
+
+### When to say "no difference"
+
+The harness reports a spread with every median because most of what looks like
+an improvement is not one. The rule this project applies:
+
+**If two configurations differ by less than the wider of their two spreads,
+report that no difference was measured.** Do not pick the larger number and do
+not quote a percentage. `bench_report.py` prints which scenarios exceeded 50%
+spread precisely so this is hard to forget.
+
+**If repeated runs reverse the ordering, say so explicitly.** That happened
+with `fsync.mode` on the laptop: one 5-trial run put `data` ahead of `full` by
+2×, a later run of the same two scenarios reversed it. Neither result is
+quotable, and
+[PERFORMANCE_RESULTS.md §5.2](PERFORMANCE_RESULTS.md#52-what-was-tried-and-what-did-not-work)
+says so rather than citing the flattering run.
+
+**An optimisation with no measurement is not an optimisation.** `writev`
+response coalescing is implemented and is listed in the optimisation table as
+*unmeasured*, because the closed-loop driver never pipelines and therefore
+gives it nothing to coalesce. Listing it as a win would be inventing a result.
+
+### The mutex-queue baseline is not a scoreboard
+
+Scenario 13 runs an in-process, mutex-protected queue with no network, no
+protocol, no checksums and no disk. It exists to bound how much of the
+per-record cost is unavoidable queueing overhead — not to produce a ratio.
+
+A ratio against it is a ratio against a different problem: it provides none of
+the guarantees being measured. Both figures also carry wide spreads, so any
+percentage derived from them inherits both and means nothing at two significant
+figures. Read it alongside the produce-path stage breakdown, which attributes
+real time to real work.
