@@ -168,23 +168,41 @@ check_failure_cluster_asan() {
 }
 
 check_bench_repro() {
-  # Two things are checked. That the pipeline runs end to end and produces
-  # every artifact it claims to; and that a second run lands within the spread
-  # the first one reported. A benchmark whose median moves outside its own
-  # spread between runs is not measuring what it says it is.
+  # Two things are checked: that the pipeline runs end to end and produces
+  # every artifact it claims to, and that a second run lands within the spread
+  # the first one reported. A benchmark whose median leaves its own error bars
+  # between runs is not measuring what it says it is.
+  #
+  # Deliberately NOT --quick. Quick runs are documented as too short to be
+  # stable, so checking their reproducibility measures the shortening rather
+  # than the harness -- an early version of this check failed on exactly that,
+  # with acks=quorum landing at 25.6k then 8.0k records/s across two 10,000
+  # record runs. A representative subset at full record counts instead, so the
+  # check stays under about ten minutes while still measuring something real.
+  local subset="01-single-producer,05-leader-ack,06-quorum-ack,08-no-batching"
+
   rm -rf /tmp/pulselog-repro-a /tmp/pulselog-repro-b
-  scripts/benchmark_release.sh --quick --trials 3 --out /tmp/pulselog-repro-a \
-    --build-dir build-verify --skip-build > /tmp/repro-a.log 2>&1 || {
-      tail -25 /tmp/repro-a.log >&2; return 1; }
+
+  for run in a b; do
+    python3 scripts/run_benchmarks.py --build-dir build-verify \
+        --out "/tmp/pulselog-repro-$run" --trials 3 --only "$subset" \
+        > "/tmp/repro-$run.log" 2>&1 || {
+          tail -25 "/tmp/repro-$run.log" >&2; return 1; }
+  done
+
+  # summary.csv is produced by bench_report.py, not by the runner, so both
+  # runs need it before they can be compared.
+  python3 scripts/bench_metadata.py --build-dir build-verify \
+    --out /tmp/pulselog-repro-a/metadata.json > /dev/null || return 1
+  for run in a b; do
+    python3 scripts/bench_report.py --results "/tmp/pulselog-repro-$run" \
+      --out "/tmp/pulselog-repro-$run" > /dev/null || return 1
+  done
 
   for artifact in REPORT.md report.html results.csv summary.csv metadata.json; do
     [[ -f "/tmp/pulselog-repro-a/$artifact" ]] || {
       echo "missing artifact: $artifact" >&2; return 1; }
   done
-
-  scripts/benchmark_release.sh --quick --trials 3 --out /tmp/pulselog-repro-b \
-    --build-dir build-verify --skip-build > /tmp/repro-b.log 2>&1 || {
-      tail -25 /tmp/repro-b.log >&2; return 1; }
 
   python3 - <<'PYEOF'
 import csv, sys
@@ -201,25 +219,34 @@ if set(a) != set(b):
     sys.exit(1)
 
 outside = []
+print(f"  {'scenario':<36}{'run a':>12}{'run b':>12}{'delta':>8}{'tol':>8}")
 for name in sorted(a):
     ma = float(a[name]["records_per_second_median"])
     mb = float(b[name]["records_per_second_median"])
-    # Allow the wider of the two reported spreads, with a floor: --quick runs
-    # are short and several scenarios are legitimately noisy.
-    tol = max(float(a[name]["relative_spread"]), float(b[name]["relative_spread"]), 0.5)
+    # Each run reports its own spread; allow the wider of the two, with a 25%
+    # floor so a scenario that happened to look tight in both runs is not held
+    # to a tolerance narrower than the harness can resolve.
+    tol = max(float(a[name]["relative_spread"]), float(b[name]["relative_spread"]), 0.25)
     delta = abs(ma - mb) / max(ma, mb)
     flag = "  <-- outside" if delta > tol else ""
-    print(f"  {name:<38} {ma:>11,.0f} {mb:>11,.0f}  delta {delta*100:5.1f}%  tol {tol*100:5.1f}%{flag}")
+    print(f"  {name:<36}{ma:>12,.0f}{mb:>12,.0f}{delta*100:>7.1f}%{tol*100:>7.1f}%{flag}")
     if delta > tol:
-        outside.append(name)
+        outside.append((name, ma, mb, delta, tol))
 
 if outside:
-    print(f"\n{len(outside)} scenario(s) moved further than their own reported "
-          f"spread between runs:", file=sys.stderr)
-    for name in outside:
-        print(f"  {name}", file=sys.stderr)
+    print(file=sys.stderr)
+    print("These scenarios moved further between runs than the spread they "
+          "themselves reported:", file=sys.stderr)
+    for name, ma, mb, delta, tol in outside:
+        print(f"  {name}: {ma:,.0f} then {mb:,.0f} "
+              f"({delta*100:.1f}% apart, tolerance {tol*100:.1f}%)", file=sys.stderr)
+    print(file=sys.stderr)
+    print("That is a statement about the scenario, not necessarily a defect: it "
+          "means\nits median cannot support a claim on this machine. Either the "
+          "trial count\nis too low or the scenario is genuinely unstable here. Do "
+          "not publish a\nnumber for it without saying so.", file=sys.stderr)
     sys.exit(1)
-print("\nboth runs agree within the spread each of them reported")
+print("\n  both runs agree within the spread each of them reported")
 PYEOF
 }
 

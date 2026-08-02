@@ -1,0 +1,63 @@
+# The Dockerfile does `COPY . .`, so without this every local build directory
+# is copied into the build context.
+#
+# That is not just slow. A CMakeCache.txt carries the absolute path it was
+# generated from, so a host build/ directory makes the in-image configure fail
+# with "the current CMakeCache.txt directory /src/build is different than
+# /home/you/PulseLog/build". CI never saw it because a fresh checkout has no
+# build directory; anyone building the image from a working tree hits it
+# immediately.
+
+# Build output
+build/
+build-*/
+cmake-build-*/
+out/
+_deps/
+CMakeCache.txt
+CMakeFiles/
+compile_commands.json
+install_manifest.txt
+
+# Compiled artefacts
+*.o
+*.a
+*.so
+*.dylib
+*.dSYM/
+
+# Runtime data from local brokers and tests
+data/
+pulselog-data/
+*.log.seg
+*.index
+
+# Benchmark and profiling output
+results/
+results-*/
+bench-results/
+perf.data
+perf.data.old
+*.folded
+flamegraph*.svg
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.venv-format/
+venv/
+
+# Local scratch
+.ci-tmp/
+
+# Version control and CI config: the image needs the sources, not the history.
+.git/
+.github/
+.gitignore
+
+# Editor and OS
+.vscode/
+.idea/
+.DS_Store
+*.swp
