@@ -31,6 +31,22 @@ Connection::Connection(Id id,
   auto peer = socket_.PeerEndpoint();
   if (peer.ok()) peer_ = std::move(peer).value();
   input_.Reserve(options_.read_chunk_bytes);
+
+  // Socket buffer sizing is best-effort: the kernel is free to clamp or round
+  // whatever it is asked for, and a failure here is a tuning miss rather than
+  // a correctness problem.
+  if (options_.send_buffer_bytes > 0) {
+    const Status status = socket_.SetSendBufferSize(options_.send_buffer_bytes);
+    if (!status.ok()) {
+      PL_DEBUG(kComponent) << "could not set SO_SNDBUF: " << status.ToString();
+    }
+  }
+  if (options_.receive_buffer_bytes > 0) {
+    const Status status = socket_.SetReceiveBufferSize(options_.receive_buffer_bytes);
+    if (!status.ok()) {
+      PL_DEBUG(kComponent) << "could not set SO_RCVBUF: " << status.ToString();
+    }
+  }
 }
 
 Connection::~Connection() = default;

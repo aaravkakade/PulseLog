@@ -58,6 +58,17 @@ struct ConnectionOptions {
   // Frames handled per readable event before yielding back to the loop, so one
   // busy connection cannot starve the others.
   std::size_t max_frames_per_event = 64;
+  // Kernel socket buffer sizes. 0 leaves the platform default alone.
+  //
+  // Worth setting explicitly in two situations. First, to bound kernel memory
+  // per connection: the userspace output ceiling below says nothing about what
+  // the kernel is holding, and Linux autotunes its write buffer up to
+  // net.ipv4.tcp_wmem's maximum (4 MiB on a stock kernel) per socket. Second,
+  // to make backpressure behaviour reproducible in tests -- with a multi-
+  // megabyte kernel buffer absorbing everything, the userspace queue never
+  // fills and the ceiling never engages.
+  int send_buffer_bytes = 0;
+  int receive_buffer_bytes = 0;
 };
 
 class Connection final : public EventHandler {

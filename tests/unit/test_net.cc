@@ -584,6 +584,9 @@ TEST(Connection, PausesReadsWhenOutputBacksUp) {
   options.connection.output_high_water_bytes = 64 * 1024;
   options.connection.output_low_water_bytes = 16 * 1024;
   options.connection.output_max_bytes = 1024 * 1024;
+  // See the note in ClosesWhenOutputCeilingIsExceeded: the kernel buffer has to
+  // be bounded or it absorbs everything and no backpressure is ever observed.
+  options.connection.send_buffer_bytes = 8192;
 
   std::atomic<std::size_t> max_pending{0};
   std::atomic<std::uint64_t> read_pauses{0};
@@ -663,6 +666,11 @@ TEST(Connection, ClosesWhenOutputCeilingIsExceeded) {
   options.connection.output_high_water_bytes = 8 * 1024;
   options.connection.output_low_water_bytes = 4 * 1024;
   options.connection.output_max_bytes = 32 * 1024;
+  // Without this the test measures the kernel, not the broker. Linux autotunes
+  // the socket write buffer up to net.ipv4.tcp_wmem's maximum -- 4 MiB on a
+  // stock kernel -- so it happily absorbs every response and the userspace
+  // queue never reaches the ceiling under test.
+  options.connection.send_buffer_bytes = 4096;
 
   std::atomic<int> closes{0};
   std::atomic<int> close_code{0};
