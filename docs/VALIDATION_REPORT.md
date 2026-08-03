@@ -7,7 +7,12 @@ from a different machine.
 
 **Reference run:** [Actions run 30771073182](https://github.com/aaravkakade/PulseLog/actions/runs/30771073182)
 at commit `183b9c6`, all ten jobs green. Benchmark figures come from the
-artifact attached to that run.
+artifact attached to that run. CI has stayed green on every commit since,
+most recently run 30772518347 at `93da7a0`.
+
+**Local verification:** `scripts/verify_release.sh` on macOS 14.5 / Apple M2 —
+13 checks pass, 1 skipped (the three-broker Docker half needs the compose
+plugin, which is not installed on that machine; CI runs it on every push).
 
 ---
 
@@ -240,7 +245,29 @@ control, so a published number traces to a reviewable diff.
 
 ---
 
-## 6. Limitations that remain
+## 6. What the local run adds, and what it cannot
+
+`scripts/verify_release.sh` runs the same set as CI on a developer machine.
+On macOS it covers formatting, both strict builds, all 251 tests in
+RelWithDebInfo and Debug, ASan+UBSan, TSan, clang-tidy in the CI container
+image, all three failure suites plus the cluster suite under ASan, and
+benchmark reproducibility.
+
+It cannot cover the GCC warning set or the epoll backend, because neither
+exists on macOS. The script prints that at the end of every run, so a green
+local result cannot be mistaken for Linux validation. **The Linux platform is
+validated by CI, not by any local run.**
+
+The reproducibility check is worth describing precisely: it runs a
+four-scenario subset twice at full record counts and fails if any median moves
+further than the spread that same run reported. On the reference machine all
+four agree — including `acks=quorum`, whose ±114% spread on that laptop is
+itself the finding, and is why no macOS durable figure is quoted as a headline
+anywhere.
+
+---
+
+## 7. Limitations that remain
 
 Unchanged by this work and not buried:
 
